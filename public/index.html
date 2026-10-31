@@ -431,7 +431,7 @@ async function gen(){
     try{const r=await fetch('/api/generate',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},body:JSON.stringify({word:c.word})});
      if(r.status===401){stop=true;toast('Wrong access key');return}
      const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));c.data=j.data;c.status='ready';c.due=Date.now()}
-    catch(e){if(!stop){c.status='error';c.err=String(e.message||e).slice(0,300);toast('AI error: '+c.err)}}
+    catch(e){const m=String(e.message||e);if(m.includes('4006')){stop=true;c.status='pending';toast('AI quota used up. Cards will be generated later.')}else if(!stop){c.status='error';c.err=m.slice(0,300);toast('AI error: '+c.err)}}
     const cur=await new Promise(r=>{const q=store('readonly').get(c.id);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)});
     if(cur&&cur.deleted)return;
     await save(c)}));
