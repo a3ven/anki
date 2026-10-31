@@ -10,7 +10,13 @@
   },
   "ai": { "binding": "AI" },
   "d1_databases": [
-    { "binding": "DB", "database_name": "anki", "database_id": "PASTE_DATABASE_ID_HERE" }
+    {
+      "binding": "DB",
+      "database_name": "anki",
+      "database_id": "397e9997-2622-4ad3-8e04-936bd614d3ea"
+    }
   ],
-  "kv_namespaces": [{ "binding": "SYNC", "id": "397e9997-2622-4ad3-8e04-936bd614d3ea" }]
+  "kv_namespaces": [
+    { "binding": "SYNC", "id": "f83df13f4fdc4cc682def90628d22ab0" }
+  ]
 }
