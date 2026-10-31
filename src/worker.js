@@ -38,22 +38,33 @@ export default {
     if (url.pathname === "/api/generate" && req.method === "POST") {
       const { word } = await req.json();
       if (!word || word.length > 80) return json({ error: "bad word" }, 400);
-      try {
-        const out = await env.AI.run(MODEL, {
-          messages: [
-            { role: "system", content: SYS },
-            { role: "user", content: JSON.stringify(word) },
-          ],
-          max_tokens: 900,
-          temperature: 0.3,
-        });
-        const d = parse(out);
-        if (!d.en || !d.fa) throw new Error("incomplete");
-        d.examples = Array.isArray(d.examples) ? d.examples.slice(0, 3) : [];
-        return json({ data: d });
-      } catch (e) {
-        return json({ error: String(e.message || e) }, 502);
+      const attempts = [
+        [MODEL, true],
+        [MODEL, false],
+        ["@cf/meta/llama-3.1-8b-instruct", false],
+      ];
+      const errs = [];
+      for (const [model, jm] of attempts) {
+        try {
+          const opts = {
+            messages: [
+              { role: "system", content: SYS },
+              { role: "user", content: JSON.stringify(word) },
+            ],
+            max_tokens: 1500,
+            temperature: 0.3,
+          };
+          if (jm) opts.response_format = { type: "json_object" };
+          const out = await env.AI.run(model, opts);
+          const d = parse(out);
+          if (!d.en || !d.fa) throw new Error("incomplete output");
+          d.examples = Array.isArray(d.examples) ? d.examples.slice(0, 3) : [];
+          return json({ data: d });
+        } catch (e) {
+          errs.push(`${model.split("/").pop()}${jm ? "+json" : ""}: ${String(e.message || e)}`);
+        }
       }
+      return json({ error: errs.join(" | ").slice(0, 500) }, 502);
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
