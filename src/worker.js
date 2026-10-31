@@ -124,14 +124,18 @@ export default {
       const row = await env.DB.prepare("SELECT data FROM cards WHERE id=?").bind(id).first();
       if (row && !JSON.parse(row.data).deleted) return json({ ok: true, exists: true, word });
       const r = await generate(env, word);
-      if (r.error) return json({ error: r.error }, 502);
       const now = Date.now();
+      // If AI fails (e.g. daily quota used up) the word is still saved as "pending";
+      // the app generates it automatically the next time it syncs.
       const card = {
-        id, word, cat: "General", status: "ready", data: r.data,
+        id, word, cat: "General", status: r.error ? "pending" : "ready",
         due: now, interval: 0, reps: 0, createdAt: now, updatedAt: now,
       };
+      if (!r.error) card.data = r.data;
       await env.DB.prepare(UPSERT).bind(id, JSON.stringify(card), now, now).run();
-      return json({ ok: true, word, en: r.data.en, fa: r.data.fa });
+      if (r.error)
+        return json({ ok: true, pending: true, word, message: "ذخیره شد، کارت بعداً ساخته می‌شود", reason: r.error.slice(0, 120) });
+      return json({ ok: true, word, en: r.data.en, fa: r.data.fa, message: r.data.fa });
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
