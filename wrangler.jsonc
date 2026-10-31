@@ -1,5 +1,5 @@
 {
-  "name": "flashcards",
+  "name": "anki",
   "main": "src/worker.js",
   "compatibility_date": "2025-10-01",
   "assets": {
@@ -8,5 +8,5 @@
     "run_worker_first": ["/api/*"]
   },
   "ai": { "binding": "AI" },
-  "kv_namespaces": [{ "binding": "SYNC" }]
+  "kv_namespaces": [{ "binding": "SYNC", "id": "f83df13f4fdc4cc682def90628d22ab0" }]
 }
