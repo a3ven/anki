@@ -1,4 +1,4 @@
-const V = "v2";
+const V = "v3";
 const SHELL = ["/", "/manifest.json", "/icon.svg"];
 const LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",

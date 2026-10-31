@@ -1,19 +1,20 @@
 <!doctype html>
-<html lang="fa" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>فلش‌کارت</title>
+<title>Flashcards</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
 <meta name="theme-color" content="#000000">
+<script>document.documentElement.dataset.theme=localStorage.theme||'dark'</script>
 <style>
 :root{--bg:#000;--card:#0c0c0c;--ink:#f2f2f2;--mute:#8c8c8c;--line:#262626;--acc:#2dd4bf;--onacc:#04201c;
 --again:#f87171;--hard:#fbbf24;--good:#4ade80;--easy:#60a5fa;color-scheme:dark}
 :root[data-theme=light]{--bg:#f4f1ec;--card:#fff;--ink:#14213d;--mute:#6b7280;--line:#e2ddd3;--acc:#0f766e;--onacc:#fff;
 --again:#b42318;--hard:#b45309;--good:#15803d;--easy:#1d4ed8;color-scheme:light}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Vazirmatn,Tahoma,"Segoe UI",system-ui,sans-serif;line-height:1.7}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;line-height:1.6}
 body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
 main{max-width:560px;margin:0 auto;padding:12px 14px 90px}
 nav{position:fixed;bottom:0;inset-inline:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
@@ -22,7 +23,7 @@ nav button[aria-selected=true]{color:var(--acc);font-weight:700;box-shadow:inset
 section[hidden]{display:none}
 .top{display:flex;justify-content:space-between;color:var(--mute);font-size:13px;margin:4px 2px 10px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:22px 18px;min-height:240px}
-.word{font-size:34px;font-weight:700;text-align:center;margin:30px 0;direction:auto;word-break:break-word}
+.word{font-size:34px;font-weight:700;text-align:center;margin:30px 0;word-break:break-word}
 .en{direction:ltr;unicode-bidi:isolate}
 .big{font-size:26px;font-weight:700}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -30,11 +31,13 @@ section[hidden]{display:none}
 .pron .en{font-family:ui-monospace,Menlo,monospace;font-size:14px}
 .ex{border-inline-start:3px solid var(--acc);padding:2px 10px;margin:10px 0}
 .ex .en{font-weight:600}
-.ex div:last-child{color:var(--mute);font-size:15px}
+.ex .tr{color:var(--mute);font-size:15px}
 .note{background:var(--bg);border-radius:10px;padding:8px 12px;font-size:14px;margin-top:12px}
-.tag{font-size:12px;color:var(--mute);border:1px solid var(--line);border-radius:6px;padding:0 6px}
+.tag{font-size:12px;color:var(--mute);border:1px solid var(--line);border-radius:6px;padding:0 6px;font-weight:400}
 .btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:10px 14px;cursor:pointer}
 .btn.pri{background:var(--acc);color:var(--onacc);border-color:var(--acc)}
+.btn.sm{padding:3px 10px;font-size:13px}
+.danger{color:var(--again);border-color:var(--again)}
 .show{width:100%;margin-top:14px;padding:14px;font-size:16px}
 .rate{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
 .rate button{padding:10px 2px;font-size:14px;font-weight:700;border-width:2px}
@@ -42,67 +45,64 @@ section[hidden]{display:none}
 .rate .a{border-color:var(--again);color:var(--again)}.rate .h{border-color:var(--hard);color:var(--hard)}
 .rate .g{border-color:var(--good);color:var(--good)}.rate .e{border-color:var(--easy);color:var(--easy)}
 select,textarea,input[type=text],input[type=password],input[type=search]{width:100%;font:inherit;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px}
-textarea{min-height:140px;direction:auto}
+textarea{min-height:140px}
 label{display:block;margin:14px 0 6px;font-weight:700}
-.list .it{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--line)}
-.list .it b{flex:1;direction:auto;text-align:start}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--mute);border-radius:999px;padding:3px 12px;cursor:pointer}
+.chip[aria-pressed=true]{border-color:var(--acc);color:var(--acc)}
+.cat{display:flex;align-items:center;gap:10px;margin:6px 0 10px}
+.cat b{flex:1;font-size:18px}
+.list .it{display:flex;align-items:center;gap:8px;padding:12px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.list .it b{flex:1;unicode-bidi:plaintext;text-align:start}
 .list .it span{color:var(--mute);font-size:12px}
-.x{border:0;background:none;color:var(--mute);font-size:18px;cursor:pointer}
+.x{border:0;background:none;color:var(--mute);font-size:18px;cursor:pointer;padding:0 4px}
 .empty{text-align:center;color:var(--mute);padding:50px 10px}
 #msg{position:fixed;top:10px;inset-inline:14px;max-width:530px;margin:auto;background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:10px;font-size:14px;z-index:9;display:none}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mute);margin-inline-end:6px}
 .dot.on{background:var(--good)}
-:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
-.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--mute);border-radius:999px;padding:3px 12px;cursor:pointer}
-.chip[aria-pressed=true]{border-color:var(--acc);color:var(--acc)}
-.cat{display:flex;align-items:center;gap:8px;margin:20px 0 2px}
-.cat b{flex:1}
-.cat .btn{padding:2px 10px;font-size:13px}
-.danger{color:var(--again);border-color:var(--again)}
-.list .it{cursor:pointer}
 dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:16px;width:min(520px,92vw);padding:18px;max-height:88vh}
 dialog::backdrop{background:rgba(0,0,0,.7)}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
 </style>
-<script>document.documentElement.dataset.theme=localStorage.theme||'dark'</script>
 </head>
 <body>
 <div id="msg" role="status"></div>
 <main>
 <section id="study"><div id="chips" class="chips"></div><div id="sbody"></div></section>
 <section id="add" hidden>
-  <label for="catSel">دسته</label>
+  <label for="catSel">Category</label>
   <select id="catSel"></select>
-  <input type="text" id="newCat" placeholder="اسم دسته جدید" hidden style="margin-top:8px">
-  <label for="words">کلمه‌ها (هر خط یک کلمه، فارسی یا انگلیسی)</label>
+  <input type="text" id="newCat" placeholder="New category name" hidden style="margin-top:8px">
+  <label for="words">Words (one per line, English or Persian)</label>
   <textarea id="words" placeholder="serendipity&#10;شانس&#10;give up"></textarea>
-  <div class="row" style="margin-top:10px"><button class="btn pri" id="addBtn">ساخت کارت</button></div>
-  <label for="file">ورودی از فایل (Excel ،CSV ،apkg)</label>
+  <div class="row" style="margin-top:10px"><button class="btn pri" id="addBtn">Create cards</button></div>
+  <label for="file">Import from file (Excel, CSV, apkg)</label>
   <input type="file" id="file" accept=".xlsx,.xls,.csv,.apkg">
-  <p class="pron" style="font-size:13px">اکسل: ستون اول هر شیت اول، کلمه‌هاست. apkg: فیلد اول هر نوت. کارت‌های ساخته‌شده فقط کلمه را نگه می‌دارند و ترجمه و مثال را هوش مصنوعی می‌سازد.</p>
+  <p class="pron" style="font-size:13px">Excel/CSV: first column of the first sheet. apkg: first field of each note. Only the words are imported; translation, pronunciation and examples are generated by AI.</p>
   <div id="queue" class="pron"></div>
 </section>
 <section id="cards" hidden>
-  <input type="search" id="q" placeholder="جستجو">
+  <div id="catHead"></div>
+  <input type="search" id="q" placeholder="Search">
   <div id="list" class="list"></div>
 </section>
 <section id="set" hidden>
-  <label for="key">کلید دسترسی (همان APP_KEY که روی ورکر ست کردی)</label>
+  <label for="key">Access key (the APP_KEY secret set on the Worker)</label>
   <input type="password" id="key" autocomplete="off">
   <div class="row" style="margin-top:10px">
-    <button class="btn pri" id="saveKey">ذخیره و همگام‌سازی</button>
-    <button class="btn" id="syncNow">همگام‌سازی الان</button>
+    <button class="btn pri" id="saveKey">Save &amp; sync</button>
+    <button class="btn" id="syncNow">Sync now</button>
   </div>
-  <label>تم</label>
-  <div class="row"><button class="btn" data-th="dark">مشکی</button><button class="btn" data-th="light">روشن</button></div>
+  <label>Theme</label>
+  <div class="row"><button class="btn" data-th="dark">Black</button><button class="btn" data-th="light">Light</button></div>
   <p class="pron"><span class="dot" id="dot"></span><span id="syncState">—</span></p>
 </section>
 </main>
 <nav role="tablist">
-  <button role="tab" data-t="study" aria-selected="true">مرور</button>
-  <button role="tab" data-t="add" aria-selected="false">افزودن</button>
-  <button role="tab" data-t="cards" aria-selected="false">کارت‌ها</button>
-  <button role="tab" data-t="set" aria-selected="false">تنظیمات</button>
+  <button role="tab" data-t="study" aria-selected="true">Study</button>
+  <button role="tab" data-t="add" aria-selected="false">Add</button>
+  <button role="tab" data-t="cards" aria-selected="false">Cards</button>
+  <button role="tab" data-t="set" aria-selected="false">Settings</button>
 </nav>
 <dialog id="dlg"><div id="dlgBody"></div></dialog>
 <script>
@@ -110,7 +110,8 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MIN=6e4,DAY=864e5;
 const STEPS={again:30*MIN,hard:DAY,good:3*DAY,easy:365*DAY};
-const LBL={again:'۳۰ دقیقه',hard:'۱ روز',good:'۳ روز',easy:'۱ سال'};
+const LBL={again:'30 min',hard:'1 day',good:'3 days',easy:'1 year'};
+const NAME={again:'Again',hard:'Hard',good:'Good',easy:'Easy'};
 const LIB={xlsx:'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
  zip:'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
  sql:'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js',
@@ -128,103 +129,133 @@ const save=async c=>{c.updatedAt=Date.now();await putMany([c]);scheduleSync()};
 async function refresh(){cards=(await getAll()).filter(c=>!c.deleted);render()}
 
 const toast=(t,ms=2500)=>{const m=$('#msg');m.textContent=t;m.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>m.style.display='none',ms)};
-const isFa=s=>/[\u0600-\u06FF]/.test(s);
 const speak=t=>{try{const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=.9;speechSynthesis.cancel();speechSynthesis.speak(u)}catch{}};
-const fmtDue=ms=>{const d=ms-Date.now();if(d<=0)return'الان';if(d<36e5)return Math.ceil(d/MIN)+' دقیقه دیگر';if(d<DAY)return Math.ceil(d/36e5)+' ساعت دیگر';return Math.ceil(d/DAY)+' روز دیگر'};
+const fmtDue=ms=>{const d=ms-Date.now();if(d<=0)return'due now';if(d<36e5)return'in '+Math.ceil(d/MIN)+' min';
+ if(d<DAY)return'in '+Math.ceil(d/36e5)+' h';const n=Math.ceil(d/DAY);if(n<90)return'in '+n+' d';if(n<700)return'in '+Math.round(n/30)+' mo';return'in '+Math.round(n/365)+' y'};
+const catOf=c=>{const k=c.cat||'General';return k==='عمومی'?'General':k};
+const cats=()=>[...new Set(cards.map(catOf))].sort((a,b)=>a.localeCompare(b));
+const isDue=c=>c.status==='ready'&&c.due<=Date.now();
+async function resetCards(list){const now=Date.now();
+ list.forEach(c=>{if(c.status==='ready'){c.due=now;c.interval=0;c.reps=0}c.updatedAt=now});
+ await putMany(list);cur=null;shown=false;await refresh();scheduleSync()}
 
 /* ---------- study ---------- */
-let cur=null,shown=false;
-const dueList=()=>{const n=Date.now();return cards.filter(c=>c.status==='ready'&&c.due<=n&&!off.has(catOf(c))).sort((a,b)=>a.due-b.due)};
+let cur=null,shown=false,off=new Set(JSON.parse(localStorage.offCats||'[]'));
+const dueList=()=>cards.filter(c=>isDue(c)&&!off.has(catOf(c))).sort((a,b)=>a.due-b.due);
 function backHtml(c){const d=c.data;
  return `<div class="row"><span class="big en">${esc(d.en)}</span>
- <button class="btn" data-say="${esc(d.en)}" aria-label="پخش تلفظ">🔊</button>${d.pos?`<span class="tag">${esc(d.pos)}</span>`:''}</div>
- <div class="pron"><span class="en">${esc(d.ipa)}</span> &nbsp; ${esc(d.fa_pron)}</div>
- <div class="big" style="font-size:22px">${esc(d.fa)}</div>
- ${(d.examples||[]).map(e=>`<div class="ex"><div class="en">${esc(e.en)}</div><div>${esc(e.fa)}</div></div>`).join('')}
- ${d.note?`<div class="note">${esc(d.note)}</div>`:''}`}
-const catOf=c=>c.cat||'عمومی';
-const cats=()=>[...new Set(cards.map(catOf))].sort((a,b)=>a.localeCompare(b,'fa'));
-let off=new Set(JSON.parse(localStorage.offCats||'[]'));
+ <button class="btn" data-say="${esc(d.en)}" aria-label="Play pronunciation">🔊</button>${d.pos?`<span class="tag">${esc(d.pos)}</span>`:''}</div>
+ <div class="pron"><span class="en">${esc(d.ipa)}</span> &nbsp; <span dir="auto">${esc(d.fa_pron)}</span></div>
+ <div class="big" dir="auto" style="font-size:22px">${esc(d.fa)}</div>
+ ${(d.examples||[]).map(e=>`<div class="ex"><div class="en">${esc(e.en)}</div><div class="tr" dir="auto">${esc(e.fa)}</div></div>`).join('')}
+ ${d.note?`<div class="note" dir="auto">${esc(d.note)}</div>`:''}`}
 function renderChips(){const l=cats();
- $('#chips').innerHTML=l.length>1?l.map(n=>{const k=cards.filter(c=>catOf(c)===n&&c.status==='ready'&&c.due<=Date.now()).length;
+ $('#chips').innerHTML=l.length>1?l.map(n=>{const k=cards.filter(c=>catOf(c)===n&&isDue(c)).length;
   return `<button class="chip" aria-pressed="${!off.has(n)}" data-cat="${esc(n)}">${esc(n)} · ${k}</button>`}).join(''):''}
 $('#chips').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(!b)return;
  const n=b.dataset.cat;off.has(n)?off.delete(n):off.add(n);localStorage.offCats=JSON.stringify([...off]);cur=null;shown=false;renderChips();renderStudy()});
 function renderStudy(){
  const el=$('#sbody'),sel=cards.filter(c=>!off.has(catOf(c))),list=dueList();
- if(!cards.length){el.innerHTML='<div class="empty">هنوز کارتی نداری.<br>از تب «افزودن» چند کلمه بده.</div>';cur=null;return}
- if(!sel.length){el.innerHTML='<div class="empty">هیچ دسته‌ای انتخاب نشده.</div>';cur=null;return}
+ if(!cards.length){el.innerHTML='<div class="empty">No cards yet.<br>Add some words in the Add tab.</div>';cur=null;return}
+ if(!sel.length){el.innerHTML='<div class="empty">No category selected.</div>';cur=null;return}
  if(!list.length){const next=sel.filter(c=>c.status==='ready').sort((a,b)=>a.due-b.due)[0];
   const pend=sel.filter(c=>c.status!=='ready').length;
-  el.innerHTML=`<div class="empty">برای الان کارتی نمونده 🎉<br>${next?'کارت بعدی: '+fmtDue(next.due):''}${pend?`<br>${pend} کارت در انتظار ساخت است`:''}</div>`;cur=null;return}
+  el.innerHTML=`<div class="empty">You're all caught up 🎉<br>${next?'Next card: '+fmtDue(next.due):''}${pend?`<br>${pend} card${pend>1?'s':''} waiting to be generated`:''}</div>`;cur=null;return}
  if(!cur||!list.find(c=>c.id===cur.id))cur=list[0];
  const c=cur;
- el.innerHTML=`<div class="top"><span>${list.length} کارت آماده مرور</span><span>${sel.length} کل</span></div>
- <div class="card">${shown?backHtml(c):`<div class="word">${esc(c.word)}</div>`}</div>
- ${shown?`<div class="rate">${['again','hard','good','easy'].map(k=>`<button class="btn ${k[0]}" data-r="${k}">${{again:'دوباره',hard:'سخت',good:'خوب',easy:'آسون'}[k]}<small>${LBL[k]}</small></button>`).join('')}</div>`
- :'<button class="btn pri show" id="showBtn">نمایش جواب</button>'}`;
-}
+ el.innerHTML=`<div class="top"><span>${list.length} due</span><span>${sel.length} total</span></div>
+ <div class="card">${shown?backHtml(c):`<div class="word" dir="auto">${esc(c.word)}</div>`}</div>
+ ${shown?`<div class="rate">${['again','hard','good','easy'].map(k=>`<button class="btn ${k[0]}" data-r="${k}">${NAME[k]}<small>${LBL[k]}</small></button>`).join('')}</div>`
+ :'<button class="btn pri show" id="showBtn">Show answer</button>'}`}
 async function rate(k){if(!cur||!shown)return;const c=cur;c.due=Date.now()+STEPS[k];c.interval=STEPS[k];c.reps=(c.reps||0)+1;
  shown=false;cur=null;await save(c);await refresh()}
 $('#sbody').addEventListener('click',e=>{
  const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
  const r=e.target.closest('[data-r]');if(r)return rate(r.dataset.r);
  if(e.target.id==='showBtn'){shown=true;renderStudy()}});
-document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea'))return;
+document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select'))return;
  if($('#study').hidden||$('#dlg').open)return;
  if(e.key===' '&&cur&&!shown){e.preventDefault();shown=true;renderStudy()}
  else if(shown&&'1234'.includes(e.key))rate(['again','hard','good','easy'][+e.key-1])});
 
-/* ---------- list ---------- */
-function renderList(){const q=$('#q').value.trim().toLowerCase();
- const ok=c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q)||catOf(c).toLowerCase().includes(q);
- const g={};cards.filter(ok).forEach(c=>(g[catOf(c)]??=[]).push(c));
- const names=Object.keys(g).sort((a,b)=>a.localeCompare(b,'fa'));
- const item=c=>`<div class="it" data-id="${esc(c.id)}"><b>${esc(c.word)}</b><span>${c.status==='ready'?fmtDue(c.due):c.status==='error'?'خطا':'در انتظار'}</span>
-  ${c.status==='error'?`<button class="x" data-retry="${esc(c.id)}" title="تلاش دوباره">↻</button>`:''}<button class="x" data-del="${esc(c.id)}" aria-label="حذف">✕</button></div>`;
- $('#list').innerHTML=names.length?names.map(n=>`<div class="cat"><b>${esc(n)} <span class="tag">${cards.filter(c=>catOf(c)===n).length}</span></b>
-  <button class="btn danger" data-delcat="${esc(n)}">حذف همه</button></div>`+g[n].sort((a,b)=>b.createdAt-a.createdAt).map(item).join('')).join(''):'<div class="empty">چیزی پیدا نشد</div>'}
+/* ---------- cards tab: categories -> words ---------- */
+let openCat=null;
+function renderList(){
+ const q=$('#q').value.trim().toLowerCase();
+ if(openCat&&!cards.some(c=>catOf(c)===openCat))openCat=null;
+ const head=$('#catHead'),list=$('#list');
+ if(openCat){const n=cards.filter(c=>catOf(c)===openCat).length;
+  head.innerHTML=`<div class="cat"><button class="btn sm" data-back>← Back</button><b dir="auto">${esc(openCat)} <span class="tag">${n}</span></b></div>
+  <div class="row" style="margin-bottom:12px"><button class="btn sm" data-resetcat>Reset review</button><button class="btn sm danger" data-delcat>Delete all</button></div>`}
+ else head.innerHTML='';
+ if(!openCat&&!q){const l=cats();
+  list.innerHTML=l.length?l.map(n=>{const cs=cards.filter(c=>catOf(c)===n);
+   return `<div class="it" data-open="${esc(n)}"><b>${esc(n)}</b><span>${cs.length} card${cs.length>1?'s':''} · ${cs.filter(isDue).length} due</span><span>›</span></div>`}).join('')
+   :'<div class="empty">No categories yet.</div>';return}
+ const ok=c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q);
+ const l=cards.filter(c=>(!openCat||catOf(c)===openCat)&&ok(c)).sort((a,b)=>b.createdAt-a.createdAt);
+ list.innerHTML=l.length?l.map(c=>`<div class="it" data-id="${esc(c.id)}"><b>${esc(c.word)}</b>
+  ${openCat?'':`<span class="tag">${esc(catOf(c))}</span>`}
+  <span>${c.status==='ready'?fmtDue(c.due):c.status==='error'?'error':'pending'}</span>
+  ${c.status==='error'?`<button class="x" data-retry="${esc(c.id)}" title="Retry">↻</button>`:''}
+  ${c.status==='ready'?`<button class="x" data-reset="${esc(c.id)}" title="Reset review" aria-label="Reset review">⟲</button>`:''}
+  <button class="x" data-del="${esc(c.id)}" aria-label="Delete">✕</button></div>`).join(''):'<div class="empty">Nothing found.</div>'}
 $('#q').oninput=renderList;
+$('#catHead').addEventListener('click',async e=>{
+ if(e.target.closest('[data-back]')){openCat=null;renderList();return}
+ if(e.target.closest('[data-resetcat]')){const t=cards.filter(c=>catOf(c)===openCat&&c.status==='ready');
+  if(!t.length||!confirm(`Reset review for ${t.length} card${t.length>1?'s':''} in "${openCat}"?`))return;
+  await resetCards(t);toast('Review reset');return}
+ if(e.target.closest('[data-delcat]')){const n=openCat,t=cards.filter(c=>catOf(c)===n);
+  if(!confirm(`Delete all ${t.length} cards in "${n}"?`))return;
+  const now=Date.now();t.forEach(c=>{c.deleted=true;c.updatedAt=now});await putMany(t);off.delete(n);openCat=null;
+  await refresh();scheduleSync();toast('Category deleted')}});
 $('#list').addEventListener('click',async e=>{
- const d=e.target.closest('[data-del]'),r=e.target.closest('[data-retry]'),dc=e.target.closest('[data-delcat]');
- if(d){const c=cards.find(x=>x.id===d.dataset.del);c.deleted=true;await save(c);await refresh();return}
- if(r){const c=cards.find(x=>x.id===r.dataset.retry);c.status='pending';await save(c);await refresh();gen();return}
- if(dc){const n=dc.dataset.delcat,t=cards.filter(c=>catOf(c)===n);
-  if(!confirm(`همه ${t.length} کارت دسته «${n}» حذف شود؟`))return;
-  const now=Date.now();t.forEach(c=>{c.deleted=true;c.updatedAt=now});await putMany(t);off.delete(n);await refresh();scheduleSync();toast('دسته حذف شد');return}
- const it=e.target.closest('.it');if(it)openDetail(it.dataset.id)});
+ const g=k=>{const b=e.target.closest(`[data-${k}]`);return b&&cards.find(x=>x.id===b.dataset[k])};
+ let c;
+ if(c=g('del')){c.deleted=true;await save(c);await refresh();return}
+ if(c=g('retry')){c.status='pending';await save(c);await refresh();gen();return}
+ if(c=g('reset')){await resetCards([c]);toast('Review reset');return}
+ const o=e.target.closest('[data-open]');if(o){openCat=o.dataset.open;$('#q').value='';renderList();return}
+ const it=e.target.closest('[data-id]');if(it)openDetail(it.dataset.id)});
+
+/* ---------- card detail ---------- */
 function openDetail(id){const c=cards.find(x=>x.id===id);if(!c)return;
  const opts=cats().map(n=>`<option ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('');
- $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><b class="big">${esc(c.word)}</b><button class="x" data-close aria-label="بستن">✕</button></div>`
-  +(c.status==='ready'?backHtml(c):`<p class="pron">${c.status==='error'?'ساخت کارت ناموفق بود.':'هنوز ساخته نشده.'}</p>`)
-  +`<label for="mv">دسته</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
-  +(c.status==='ready'?`<p class="pron">مرور بعدی: ${fmtDue(c.due)}</p>`:'');
+ $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><b class="big" dir="auto">${esc(c.word)}</b><button class="x" data-close aria-label="Close">✕</button></div>`
+  +(c.status==='ready'?backHtml(c):`<p class="pron">${c.status==='error'?'Card generation failed.':'Not generated yet.'}</p>`)
+  +`<label for="mv">Category</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
+  +(c.status==='ready'?`<p class="pron">Next review: ${fmtDue(c.due)}</p>`:'')
+  +`<div class="row">${c.status==='ready'?`<button class="btn sm" data-resetone="${esc(c.id)}">Reset review</button>`:''}<button class="btn sm danger" data-delone="${esc(c.id)}">Delete</button></div>`;
  $('#dlg').showModal()}
-$('#dlg').addEventListener('click',e=>{const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
+$('#dlg').addEventListener('click',async e=>{
+ const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
+ const r=e.target.closest('[data-resetone]');if(r){await resetCards([cards.find(x=>x.id===r.dataset.resetone)]);$('#dlg').close();toast('Review reset');return}
+ const d=e.target.closest('[data-delone]');if(d){const c=cards.find(x=>x.id===d.dataset.delone);c.deleted=true;await save(c);$('#dlg').close();await refresh();return}
  if(e.target.closest('[data-close]')||e.target===$('#dlg'))$('#dlg').close()});
 $('#dlg').addEventListener('change',async e=>{if(e.target.id!=='mv')return;
- const c=cards.find(x=>x.id===e.target.dataset.id);c.cat=e.target.value;await save(c);await refresh();toast('به دسته جدید منتقل شد')});
+ const c=cards.find(x=>x.id===e.target.dataset.id);c.cat=e.target.value;await save(c);await refresh();toast('Moved to "'+c.cat+'"')});
 
 /* ---------- add / import ---------- */
 async function addWords(ws,cat){
- cat=cat||'عمومی';
+ cat=cat||'General';
  const have=new Set((await getAll()).filter(c=>!c.deleted).map(c=>c.id));let n=0;const now=Date.now(),out=[];
  for(let w of ws){w=String(w).replace(/\s+/g,' ').trim();if(!w||w.length>60)continue;
   const id=w.toLowerCase();if(have.has(id))continue;have.add(id);
   out.push({id,word:w,cat,status:'pending',due:now,interval:0,reps:0,createdAt:now,updatedAt:now});n++}
  await putMany(out);localStorage.lastCat=cat;await refresh();$('#catSel').value=cat;$('#newCat').hidden=true;$('#newCat').value='';
- toast(n+' کارت جدید در دسته «'+cat+'» اضافه شد');gen();scheduleSync()}
-function fillCatSelect(){const sel=$('#catSel'),v=sel.value||localStorage.lastCat||'عمومی';
- const l=[...new Set(['عمومی',...cats()])];
- sel.innerHTML=l.map(c=>`<option>${esc(c)}</option>`).join('')+'<option value="__new">+ دسته جدید…</option>';
+ toast(`${n} new card${n===1?'':'s'} added to "${cat}"`);gen();scheduleSync()}
+function fillCatSelect(){const sel=$('#catSel'),v=sel.value||localStorage.lastCat||'General';
+ const l=[...new Set(['General',...cats()])];
+ sel.innerHTML=l.map(c=>`<option>${esc(c)}</option>`).join('')+'<option value="__new">+ New category…</option>';
  sel.value=(v==='__new'||l.includes(v))?v:l[0];$('#newCat').hidden=sel.value!=='__new'}
 $('#catSel').onchange=()=>{$('#newCat').hidden=$('#catSel').value!=='__new';if(!$('#newCat').hidden)$('#newCat').focus()};
-function pickedCat(){const sel=$('#catSel');return sel.value==='__new'?($('#newCat').value.trim()||'عمومی'):sel.value}
+function pickedCat(){const sel=$('#catSel');return sel.value==='__new'?($('#newCat').value.trim()||'General'):sel.value}
 $('#addBtn').onclick=()=>{const v=$('#words').value.split('\n');$('#words').value='';addWords(v,pickedCat())};
 const load=src=>new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();
- const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('بارگذاری کتابخانه ناموفق بود (آنلاین نیستی؟)'));document.head.appendChild(s)});
+ const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load the import library (are you offline?)'));document.head.appendChild(s)});
 $('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const cat=pickedCat();
- try{toast('در حال خواندن فایل…',8000);const ext=f.name.split('.').pop().toLowerCase();let ws=[];
+ try{toast('Reading file…',8000);const ext=f.name.split('.').pop().toLowerCase();let ws=[];
   if(['xlsx','xls','csv'].includes(ext)){await load(LIB.xlsx);
    const wb=XLSX.read(await f.arrayBuffer());
    ws=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}).map(r=>r[0]).filter(v=>v!=null&&v!=='').map(String);
@@ -232,12 +263,12 @@ $('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)
   else if(ext==='apkg'){await load(LIB.zip);await load(LIB.sql);
    const z=await JSZip.loadAsync(f);const ent=z.file('collection.anki21')||z.file('collection.anki2');
    if(!ent||(z.file('collection.anki21b')&&!z.file('collection.anki21')))
-    throw new Error('این apkg با فرمت جدید است. موقع Export از Anki گزینه Support older Anki versions را بزن.');
+    throw new Error('This apkg uses the new Anki format. When exporting, enable "Support older Anki versions".');
    const SQL=await initSqlJs({locateFile:n=>LIB.sqlBase+n});
    const d=new SQL.Database(await ent.async('uint8array'));
    ws=((d.exec('select flds from notes')[0]||{}).values||[]).map(v=>String(v[0]).split('\x1f')[0].replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').trim());d.close()}
-  else throw new Error('فرمت فایل پشتیبانی نمی‌شود');
-  if(!ws.length)throw new Error('کلمه‌ای در فایل پیدا نشد');
+  else throw new Error('Unsupported file type');
+  if(!ws.length)throw new Error('No words found in the file');
   await addWords(ws,cat)}catch(err){toast(err.message,6000)}};
 
 /* ---------- AI generation (queued, offline-safe) ---------- */
@@ -248,46 +279,46 @@ async function gen(){
  try{
   while(true){
    const todo=cards.filter(c=>c.status==='pending').slice(0,3);if(!todo.length)break;
-   $('#queue').textContent=`در حال ساخت… ${cards.filter(c=>c.status==='pending').length} کارت مانده`;
+   $('#queue').textContent=`Generating… ${cards.filter(c=>c.status==='pending').length} left`;
    let stop=false;
    await Promise.all(todo.map(async c=>{
     try{const r=await fetch('/api/generate',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},body:JSON.stringify({word:c.word})});
-     if(r.status===401){stop=true;toast('کلید دسترسی اشتباه است');return}
+     if(r.status===401){stop=true;toast('Wrong access key');return}
      const j=await r.json();if(!r.ok)throw 0;c.data=j.data;c.status='ready';c.due=Date.now()}
     catch{if(!stop){c.status='error'}}
     await save(c)}));
    await refresh();if(stop||!navigator.onLine)break}
- }finally{genBusy=false;$('#queue').textContent=cards.some(c=>c.status==='pending')&&!KEY()?'برای ساخت کارت، کلید دسترسی را در تنظیمات وارد کن.':''}
+ }finally{genBusy=false;$('#queue').textContent=cards.some(c=>c.status==='pending')&&!KEY()?'Enter the access key in Settings to generate cards.':''}
 }
 
 /* ---------- sync ---------- */
 let syncT,syncing=false;
 const scheduleSync=()=>{clearTimeout(syncT);syncT=setTimeout(sync,2500)};
 function syncState(t,on){$('#syncState').textContent=t;$('#dot').className='dot'+(on?' on':'')}
-async function sync(manual){
- if(syncing||!KEY())return;if(!navigator.onLine){syncState('آفلاین — بعداً همگام می‌شود');return}
+async function sync(){
+ if(syncing||!KEY())return;if(!navigator.onLine){syncState('Offline — will sync when back online');return}
  syncing=true;
  try{const since=+localStorage.since||0,lastPush=+localStorage.lastPush||0,t0=Date.now();
   const all=await getAll();
   const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},
    body:JSON.stringify({cards:all.filter(c=>c.updatedAt>lastPush),since})});
-  if(r.status===401){syncState('کلید اشتباه است');return}
+  if(r.status===401){syncState('Wrong access key');return}
   const j=await r.json();const local=new Map(all.map(c=>[c.id,c]));
   await putMany(j.cards.filter(c=>!local.has(c.id)||c.updatedAt>local.get(c.id).updatedAt));
   localStorage.since=j.now;localStorage.lastPush=t0;
-  await refresh();syncState('همگام شد · '+new Date().toLocaleTimeString('fa-IR'),true);gen()
- }catch{syncState('همگام‌سازی ناموفق بود')}finally{syncing=false}}
-$('#saveKey').onclick=()=>{localStorage.appKey=$('#key').value.trim();localStorage.since=0;localStorage.lastPush=0;sync(true);gen()};
-$('#syncNow').onclick=()=>sync(true);
+  await refresh();syncState('Synced · '+new Date().toLocaleTimeString('en-US'),true);gen()
+ }catch{syncState('Sync failed')}finally{syncing=false}}
+$('#saveKey').onclick=()=>{localStorage.appKey=$('#key').value.trim();localStorage.since=0;localStorage.lastPush=0;sync();gen()};
+$('#syncNow').onclick=()=>sync();
 addEventListener('online',()=>{sync();gen()});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
 
-/* ---------- tabs / boot ---------- */
-function render(){renderChips();renderStudy();fillCatSelect();if(!$('#cards').hidden)renderList()}
+/* ---------- theme / tabs / boot ---------- */
 function setTheme(t){localStorage.theme=t;document.documentElement.dataset.theme=t;
  document.querySelector('meta[name=theme-color]').content=t==='light'?'#f4f1ec':'#000000'}
 document.querySelectorAll('[data-th]').forEach(b=>b.onclick=()=>setTheme(b.dataset.th));
 setTheme(localStorage.theme||'dark');
+function render(){renderChips();renderStudy();fillCatSelect();if(!$('#cards').hidden)renderList()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));
  document.querySelectorAll('main section').forEach(s=>s.hidden=s.id!==b.dataset.t);
