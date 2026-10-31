@@ -28,13 +28,34 @@ function parse(out) {
   return JSON.parse(m[0]);
 }
 
-async function generate(env, word) {
+// ---------- AI providers: Cloudflare first, then fallbacks ----------
+// Each fallback is optional: it is used only if its secret key is set in the Worker.
+// Models can be changed without editing code via the *_MODEL variables.
+function fallbackProviders(env) {
+  const list = [];
+  if (env.GEMINI_API_KEY)
+    list.push({ name: "gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", key: env.GEMINI_API_KEY, model: env.GEMINI_MODEL || "gemini-2.5-flash" });
+  if (env.GROQ_API_KEY)
+    list.push({ name: "groq", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.GROQ_MODEL || "openai/gpt-oss-120b" });
+  if (env.OPENROUTER_API_KEY)
+    list.push({ name: "openrouter", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free" });
+  if (env.MISTRAL_API_KEY)
+    list.push({ name: "mistral", url: "https://api.mistral.ai/v1/chat/completions", key: env.MISTRAL_API_KEY, model: env.MISTRAL_MODEL || "mistral-small-latest" });
+  return list;
+}
+
+function finish(d) {
+  if (!d || !d.en || !d.fa) throw new Error("incomplete output");
+  d.examples = Array.isArray(d.examples) ? d.examples.slice(0, 3) : [];
+  return { data: d };
+}
+
+async function viaCloudflare(env, word, errs) {
   const attempts = [
     [MODEL, true],
     [MODEL, false],
     ["@cf/google/gemma-4-26b-a4b-it", false],
   ];
-  const errs = [];
   for (const [model, jm] of attempts) {
     try {
       const opts = {
@@ -47,15 +68,52 @@ async function generate(env, word) {
       };
       if (jm) opts.response_format = { type: "json_object" };
       const out = await env.AI.run(model, opts);
-      const d = parse(out);
-      if (!d.en || !d.fa) throw new Error("incomplete output");
-      d.examples = Array.isArray(d.examples) ? d.examples.slice(0, 3) : [];
-      return { data: d };
+      return finish(parse(out));
     } catch (e) {
       const m = String(e.message || e);
-      errs.push(`${model.split("/").pop()}${jm ? "+json" : ""}: ${m}`);
-      if (m.includes("4006")) break; // daily quota used up: other models share it
+      errs.push(`cf/${model.split("/").pop()}${jm ? "+json" : ""}: ${m}`);
+      if (m.includes("4006")) break; // daily quota used up: other CF models share it
     }
+  }
+  return null;
+}
+
+async function viaOpenAICompat(p, word, errs) {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 25000);
+    const res = await fetch(p.url, {
+      method: "POST",
+      signal: ctl.signal,
+      headers: { "content-type": "application/json", authorization: "Bearer " + p.key },
+      body: JSON.stringify({
+        model: p.model,
+        messages: [
+          { role: "system", content: SYS },
+          { role: "user", content: JSON.stringify(word) },
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      }),
+    });
+    clearTimeout(t);
+    const body = await res.text();
+    if (!res.ok) throw new Error(res.status + " " + body.slice(0, 120));
+    const txt = JSON.parse(body)?.choices?.[0]?.message?.content;
+    return finish(parse({ response: txt }));
+  } catch (e) {
+    errs.push(`${p.name}: ${String(e.message || e).slice(0, 150)}`);
+    return null; // quota / error -> caller tries the next provider
+  }
+}
+
+async function generate(env, word) {
+  const errs = [];
+  const cf = await viaCloudflare(env, word, errs);
+  if (cf) return cf;
+  for (const p of fallbackProviders(env)) {
+    const r = await viaOpenAICompat(p, word, errs);
+    if (r) return r;
   }
   return { error: errs.join(" | ").slice(0, 500) };
 }
