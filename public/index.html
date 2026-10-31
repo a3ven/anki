@@ -247,7 +247,10 @@ async function refresh(){cards=(await getAll()).filter(c=>!c.deleted);render()}
 
 const toast=(t,ms=2500)=>{const m=$('#msg');m.textContent=t;m.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>m.style.display='none',ms)};
 const rateVal=()=>+localStorage.rate||0.7;
-const speak=t=>{try{const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=rateVal();speechSynthesis.cancel();speechSynthesis.speak(u)}catch{}};
+let enVoice=null;const pickVoice=()=>{try{const v=speechSynthesis.getVoices().filter(x=>/^en[-_]US/i.test(x.lang));enVoice=v.find(x=>x.localService)||v[0]||null}catch{}};
+try{pickVoice();speechSynthesis.addEventListener('voiceschanged',pickVoice)}catch{}
+const speak=t=>{try{const go=()=>{const u=new SpeechSynthesisUtterance(t);u.lang='en-US';if(enVoice)u.voice=enVoice;u.rate=rateVal();speechSynthesis.speak(u)};
+ if(speechSynthesis.speaking||speechSynthesis.pending){speechSynthesis.cancel();setTimeout(go,60)}else go()}catch{}};
 const fmtDue=ms=>{const d=ms-Date.now();if(d<=0)return'due now';if(d<36e5)return'in '+Math.ceil(d/MIN)+' min';
  if(d<DAY)return'in '+Math.ceil(d/36e5)+' h';const n=Math.ceil(d/DAY);if(n<90)return'in '+n+' d';if(n<700)return'in '+Math.round(n/30)+' mo';return'in '+Math.round(n/365)+' y'};
 const catOf=c=>{const k=c.cat||'General';return k==='عمومی'?'General':k};
@@ -579,6 +582,7 @@ document.querySelectorAll('[data-th]').forEach(b=>b.onclick=()=>setTheme(b.datas
 setTheme(localStorage.theme||'dark');
 $('#rate').value=rateVal();$('#rateVal').textContent=rateVal().toFixed(2)+'×';
 $('#rate').oninput=e=>{localStorage.rate=e.target.value;$('#rateVal').textContent=(+e.target.value).toFixed(2)+'×'};
+$('#rate').onchange=()=>speak('The quick brown fox');
 $('#testSay').onclick=()=>speak('The quick brown fox jumps over the lazy dog');
 function renderIntervals(){const s=steps();
  $('#ivBox').innerHTML=['again','hard','good','easy'].map(k=>{const ms=s[k];let u=MIN;if(ms%DAY===0)u=DAY;else if(ms%36e5===0)u=36e5;
