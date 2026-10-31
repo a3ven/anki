@@ -6,12 +6,12 @@
 <title>فلش‌کارت</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
-<meta name="theme-color" content="#14213d">
+<meta name="theme-color" content="#000000">
 <style>
-:root{--bg:#f4f1ec;--card:#fff;--ink:#14213d;--mute:#6b7280;--line:#e2ddd3;--acc:#0f766e;
+:root{--bg:#000;--card:#0c0c0c;--ink:#f2f2f2;--mute:#8c8c8c;--line:#262626;--acc:#2dd4bf;--onacc:#04201c;
+--again:#f87171;--hard:#fbbf24;--good:#4ade80;--easy:#60a5fa;color-scheme:dark}
+:root[data-theme=light]{--bg:#f4f1ec;--card:#fff;--ink:#14213d;--mute:#6b7280;--line:#e2ddd3;--acc:#0f766e;--onacc:#fff;
 --again:#b42318;--hard:#b45309;--good:#15803d;--easy:#1d4ed8;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1626;--card:#18223a;--ink:#eef1f7;--mute:#9aa4b8;--line:#2a3652;--acc:#2dd4bf;
---again:#f87171;--hard:#fbbf24;--good:#4ade80;--easy:#60a5fa;color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Vazirmatn,Tahoma,"Segoe UI",system-ui,sans-serif;line-height:1.7}
 body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
@@ -34,15 +34,14 @@ section[hidden]{display:none}
 .note{background:var(--bg);border-radius:10px;padding:8px 12px;font-size:14px;margin-top:12px}
 .tag{font-size:12px;color:var(--mute);border:1px solid var(--line);border-radius:6px;padding:0 6px}
 .btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:10px 14px;cursor:pointer}
-.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
-@media (prefers-color-scheme:dark){.btn.pri{color:#06201c}}
+.btn.pri{background:var(--acc);color:var(--onacc);border-color:var(--acc)}
 .show{width:100%;margin-top:14px;padding:14px;font-size:16px}
 .rate{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
 .rate button{padding:10px 2px;font-size:14px;font-weight:700;border-width:2px}
 .rate small{display:block;font-weight:400;color:var(--mute);font-size:12px}
 .rate .a{border-color:var(--again);color:var(--again)}.rate .h{border-color:var(--hard);color:var(--hard)}
 .rate .g{border-color:var(--good);color:var(--good)}.rate .e{border-color:var(--easy);color:var(--easy)}
-textarea,input[type=text],input[type=password],input[type=search]{width:100%;font:inherit;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px}
+select,textarea,input[type=text],input[type=password],input[type=search]{width:100%;font:inherit;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px}
 textarea{min-height:140px;direction:auto}
 label{display:block;margin:14px 0 6px;font-weight:700}
 .list .it{display:flex;align-items:center;gap:8px;padding:10px 4px;border-bottom:1px solid var(--line)}
@@ -54,13 +53,27 @@ label{display:block;margin:14px 0 6px;font-weight:700}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--mute);margin-inline-end:6px}
 .dot.on{background:var(--good)}
 :focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.chip{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--mute);border-radius:999px;padding:3px 12px;cursor:pointer}
+.chip[aria-pressed=true]{border-color:var(--acc);color:var(--acc)}
+.cat{display:flex;align-items:center;gap:8px;margin:20px 0 2px}
+.cat b{flex:1}
+.cat .btn{padding:2px 10px;font-size:13px}
+.danger{color:var(--again);border-color:var(--again)}
+.list .it{cursor:pointer}
+dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:16px;width:min(520px,92vw);padding:18px;max-height:88vh}
+dialog::backdrop{background:rgba(0,0,0,.7)}
 </style>
+<script>document.documentElement.dataset.theme=localStorage.theme||'dark'</script>
 </head>
 <body>
 <div id="msg" role="status"></div>
 <main>
-<section id="study"></section>
+<section id="study"><div id="chips" class="chips"></div><div id="sbody"></div></section>
 <section id="add" hidden>
+  <label for="catSel">دسته</label>
+  <select id="catSel"></select>
+  <input type="text" id="newCat" placeholder="اسم دسته جدید" hidden style="margin-top:8px">
   <label for="words">کلمه‌ها (هر خط یک کلمه، فارسی یا انگلیسی)</label>
   <textarea id="words" placeholder="serendipity&#10;شانس&#10;give up"></textarea>
   <div class="row" style="margin-top:10px"><button class="btn pri" id="addBtn">ساخت کارت</button></div>
@@ -80,6 +93,8 @@ label{display:block;margin:14px 0 6px;font-weight:700}
     <button class="btn pri" id="saveKey">ذخیره و همگام‌سازی</button>
     <button class="btn" id="syncNow">همگام‌سازی الان</button>
   </div>
+  <label>تم</label>
+  <div class="row"><button class="btn" data-th="dark">مشکی</button><button class="btn" data-th="light">روشن</button></div>
   <p class="pron"><span class="dot" id="dot"></span><span id="syncState">—</span></p>
 </section>
 </main>
@@ -89,6 +104,7 @@ label{display:block;margin:14px 0 6px;font-weight:700}
   <button role="tab" data-t="cards" aria-selected="false">کارت‌ها</button>
   <button role="tab" data-t="set" aria-selected="false">تنظیمات</button>
 </nav>
+<dialog id="dlg"><div id="dlgBody"></div></dialog>
 <script>
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -118,7 +134,7 @@ const fmtDue=ms=>{const d=ms-Date.now();if(d<=0)return'الان';if(d<36e5)retur
 
 /* ---------- study ---------- */
 let cur=null,shown=false;
-const dueList=()=>{const n=Date.now();return cards.filter(c=>c.status==='ready'&&c.due<=n).sort((a,b)=>a.due-b.due)};
+const dueList=()=>{const n=Date.now();return cards.filter(c=>c.status==='ready'&&c.due<=n&&!off.has(catOf(c))).sort((a,b)=>a.due-b.due)};
 function backHtml(c){const d=c.data;
  return `<div class="row"><span class="big en">${esc(d.en)}</span>
  <button class="btn" data-say="${esc(d.en)}" aria-label="پخش تلفظ">🔊</button>${d.pos?`<span class="tag">${esc(d.pos)}</span>`:''}</div>
@@ -126,55 +142,88 @@ function backHtml(c){const d=c.data;
  <div class="big" style="font-size:22px">${esc(d.fa)}</div>
  ${(d.examples||[]).map(e=>`<div class="ex"><div class="en">${esc(e.en)}</div><div>${esc(e.fa)}</div></div>`).join('')}
  ${d.note?`<div class="note">${esc(d.note)}</div>`:''}`}
+const catOf=c=>c.cat||'عمومی';
+const cats=()=>[...new Set(cards.map(catOf))].sort((a,b)=>a.localeCompare(b,'fa'));
+let off=new Set(JSON.parse(localStorage.offCats||'[]'));
+function renderChips(){const l=cats();
+ $('#chips').innerHTML=l.length>1?l.map(n=>{const k=cards.filter(c=>catOf(c)===n&&c.status==='ready'&&c.due<=Date.now()).length;
+  return `<button class="chip" aria-pressed="${!off.has(n)}" data-cat="${esc(n)}">${esc(n)} · ${k}</button>`}).join(''):''}
+$('#chips').addEventListener('click',e=>{const b=e.target.closest('[data-cat]');if(!b)return;
+ const n=b.dataset.cat;off.has(n)?off.delete(n):off.add(n);localStorage.offCats=JSON.stringify([...off]);cur=null;shown=false;renderChips();renderStudy()});
 function renderStudy(){
- const list=dueList(),el=$('#study');
+ const el=$('#sbody'),sel=cards.filter(c=>!off.has(catOf(c))),list=dueList();
  if(!cards.length){el.innerHTML='<div class="empty">هنوز کارتی نداری.<br>از تب «افزودن» چند کلمه بده.</div>';cur=null;return}
- if(!list.length){const next=cards.filter(c=>c.status==='ready').sort((a,b)=>a.due-b.due)[0];
-  const pend=cards.filter(c=>c.status!=='ready').length;
+ if(!sel.length){el.innerHTML='<div class="empty">هیچ دسته‌ای انتخاب نشده.</div>';cur=null;return}
+ if(!list.length){const next=sel.filter(c=>c.status==='ready').sort((a,b)=>a.due-b.due)[0];
+  const pend=sel.filter(c=>c.status!=='ready').length;
   el.innerHTML=`<div class="empty">برای الان کارتی نمونده 🎉<br>${next?'کارت بعدی: '+fmtDue(next.due):''}${pend?`<br>${pend} کارت در انتظار ساخت است`:''}</div>`;cur=null;return}
- if(!cur||!list.includes(cur)&&!shown)cur=list[0];
- else if(!list.find(c=>c.id===cur.id))cur=list[0];
+ if(!cur||!list.find(c=>c.id===cur.id))cur=list[0];
  const c=cur;
- el.innerHTML=`<div class="top"><span>${list.length} کارت آماده مرور</span><span>${cards.length} کل</span></div>
+ el.innerHTML=`<div class="top"><span>${list.length} کارت آماده مرور</span><span>${sel.length} کل</span></div>
  <div class="card">${shown?backHtml(c):`<div class="word">${esc(c.word)}</div>`}</div>
- ${shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="btn ${k[0]}" data-r="${k}">${{again:'دوباره',hard:'سخت',good:'خوب',easy:'آسون'}[k]}<small>${LBL[k]}</small></button>`).join('')}</div>`
+ ${shown?`<div class="rate">${['again','hard','good','easy'].map(k=>`<button class="btn ${k[0]}" data-r="${k}">${{again:'دوباره',hard:'سخت',good:'خوب',easy:'آسون'}[k]}<small>${LBL[k]}</small></button>`).join('')}</div>`
  :'<button class="btn pri show" id="showBtn">نمایش جواب</button>'}`;
- if(!shown&&!isFa(c.word)){} 
 }
 async function rate(k){if(!cur||!shown)return;const c=cur;c.due=Date.now()+STEPS[k];c.interval=STEPS[k];c.reps=(c.reps||0)+1;
  shown=false;cur=null;await save(c);await refresh()}
-$('#study').addEventListener('click',e=>{
+$('#sbody').addEventListener('click',e=>{
  const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
  const r=e.target.closest('[data-r]');if(r)return rate(r.dataset.r);
  if(e.target.id==='showBtn'){shown=true;renderStudy()}});
 document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea'))return;
- if($('#study').hidden)return;
+ if($('#study').hidden||$('#dlg').open)return;
  if(e.key===' '&&cur&&!shown){e.preventDefault();shown=true;renderStudy()}
  else if(shown&&'1234'.includes(e.key))rate(['again','hard','good','easy'][+e.key-1])});
 
 /* ---------- list ---------- */
 function renderList(){const q=$('#q').value.trim().toLowerCase();
- const l=cards.filter(c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q))
-  .sort((a,b)=>b.createdAt-a.createdAt).slice(0,300);
- $('#list').innerHTML=l.length?l.map(c=>`<div class="it"><b>${esc(c.word)}</b><span>${c.status==='ready'?fmtDue(c.due):c.status==='error'?'خطا':'در انتظار'}</span>
- ${c.status==='error'?`<button class="x" data-retry="${esc(c.id)}" title="تلاش دوباره">↻</button>`:''}<button class="x" data-del="${esc(c.id)}" aria-label="حذف">✕</button></div>`).join(''):'<div class="empty">چیزی پیدا نشد</div>'}
+ const ok=c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q)||catOf(c).toLowerCase().includes(q);
+ const g={};cards.filter(ok).forEach(c=>(g[catOf(c)]??=[]).push(c));
+ const names=Object.keys(g).sort((a,b)=>a.localeCompare(b,'fa'));
+ const item=c=>`<div class="it" data-id="${esc(c.id)}"><b>${esc(c.word)}</b><span>${c.status==='ready'?fmtDue(c.due):c.status==='error'?'خطا':'در انتظار'}</span>
+  ${c.status==='error'?`<button class="x" data-retry="${esc(c.id)}" title="تلاش دوباره">↻</button>`:''}<button class="x" data-del="${esc(c.id)}" aria-label="حذف">✕</button></div>`;
+ $('#list').innerHTML=names.length?names.map(n=>`<div class="cat"><b>${esc(n)} <span class="tag">${cards.filter(c=>catOf(c)===n).length}</span></b>
+  <button class="btn danger" data-delcat="${esc(n)}">حذف همه</button></div>`+g[n].sort((a,b)=>b.createdAt-a.createdAt).map(item).join('')).join(''):'<div class="empty">چیزی پیدا نشد</div>'}
 $('#q').oninput=renderList;
 $('#list').addEventListener('click',async e=>{
- const d=e.target.closest('[data-del]'),r=e.target.closest('[data-retry]');
- if(d){const c=cards.find(x=>x.id===d.dataset.del);c.deleted=true;await save(c);await refresh()}
- if(r){const c=cards.find(x=>x.id===r.dataset.retry);c.status='pending';await save(c);await refresh();gen()}});
+ const d=e.target.closest('[data-del]'),r=e.target.closest('[data-retry]'),dc=e.target.closest('[data-delcat]');
+ if(d){const c=cards.find(x=>x.id===d.dataset.del);c.deleted=true;await save(c);await refresh();return}
+ if(r){const c=cards.find(x=>x.id===r.dataset.retry);c.status='pending';await save(c);await refresh();gen();return}
+ if(dc){const n=dc.dataset.delcat,t=cards.filter(c=>catOf(c)===n);
+  if(!confirm(`همه ${t.length} کارت دسته «${n}» حذف شود؟`))return;
+  const now=Date.now();t.forEach(c=>{c.deleted=true;c.updatedAt=now});await putMany(t);off.delete(n);await refresh();scheduleSync();toast('دسته حذف شد');return}
+ const it=e.target.closest('.it');if(it)openDetail(it.dataset.id)});
+function openDetail(id){const c=cards.find(x=>x.id===id);if(!c)return;
+ const opts=cats().map(n=>`<option ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('');
+ $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:10px"><b class="big">${esc(c.word)}</b><button class="x" data-close aria-label="بستن">✕</button></div>`
+  +(c.status==='ready'?backHtml(c):`<p class="pron">${c.status==='error'?'ساخت کارت ناموفق بود.':'هنوز ساخته نشده.'}</p>`)
+  +`<label for="mv">دسته</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
+  +(c.status==='ready'?`<p class="pron">مرور بعدی: ${fmtDue(c.due)}</p>`:'');
+ $('#dlg').showModal()}
+$('#dlg').addEventListener('click',e=>{const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
+ if(e.target.closest('[data-close]')||e.target===$('#dlg'))$('#dlg').close()});
+$('#dlg').addEventListener('change',async e=>{if(e.target.id!=='mv')return;
+ const c=cards.find(x=>x.id===e.target.dataset.id);c.cat=e.target.value;await save(c);await refresh();toast('به دسته جدید منتقل شد')});
 
 /* ---------- add / import ---------- */
-async function addWords(ws){
- const have=new Set((await getAll()).map(c=>c.id));let n=0;const now=Date.now(),out=[];
+async function addWords(ws,cat){
+ cat=cat||'عمومی';
+ const have=new Set((await getAll()).filter(c=>!c.deleted).map(c=>c.id));let n=0;const now=Date.now(),out=[];
  for(let w of ws){w=String(w).replace(/\s+/g,' ').trim();if(!w||w.length>60)continue;
   const id=w.toLowerCase();if(have.has(id))continue;have.add(id);
-  out.push({id,word:w,status:'pending',due:now,interval:0,reps:0,createdAt:now,updatedAt:now});n++}
- await putMany(out);await refresh();toast(n+' کارت جدید اضافه شد');gen();scheduleSync()}
-$('#addBtn').onclick=()=>{const v=$('#words').value.split('\n');$('#words').value='';addWords(v)};
+  out.push({id,word:w,cat,status:'pending',due:now,interval:0,reps:0,createdAt:now,updatedAt:now});n++}
+ await putMany(out);localStorage.lastCat=cat;await refresh();$('#catSel').value=cat;$('#newCat').hidden=true;$('#newCat').value='';
+ toast(n+' کارت جدید در دسته «'+cat+'» اضافه شد');gen();scheduleSync()}
+function fillCatSelect(){const sel=$('#catSel'),v=sel.value||localStorage.lastCat||'عمومی';
+ const l=[...new Set(['عمومی',...cats()])];
+ sel.innerHTML=l.map(c=>`<option>${esc(c)}</option>`).join('')+'<option value="__new">+ دسته جدید…</option>';
+ sel.value=(v==='__new'||l.includes(v))?v:l[0];$('#newCat').hidden=sel.value!=='__new'}
+$('#catSel').onchange=()=>{$('#newCat').hidden=$('#catSel').value!=='__new';if(!$('#newCat').hidden)$('#newCat').focus()};
+function pickedCat(){const sel=$('#catSel');return sel.value==='__new'?($('#newCat').value.trim()||'عمومی'):sel.value}
+$('#addBtn').onclick=()=>{const v=$('#words').value.split('\n');$('#words').value='';addWords(v,pickedCat())};
 const load=src=>new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();
  const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('بارگذاری کتابخانه ناموفق بود (آنلاین نیستی؟)'));document.head.appendChild(s)});
-$('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+$('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const cat=pickedCat();
  try{toast('در حال خواندن فایل…',8000);const ext=f.name.split('.').pop().toLowerCase();let ws=[];
   if(['xlsx','xls','csv'].includes(ext)){await load(LIB.xlsx);
    const wb=XLSX.read(await f.arrayBuffer());
@@ -189,7 +238,7 @@ $('#file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)
    ws=((d.exec('select flds from notes')[0]||{}).values||[]).map(v=>String(v[0]).split('\x1f')[0].replace(/<[^>]*>/g,' ').replace(/&nbsp;/g,' ').trim());d.close()}
   else throw new Error('فرمت فایل پشتیبانی نمی‌شود');
   if(!ws.length)throw new Error('کلمه‌ای در فایل پیدا نشد');
-  await addWords(ws)}catch(err){toast(err.message,6000)}};
+  await addWords(ws,cat)}catch(err){toast(err.message,6000)}};
 
 /* ---------- AI generation (queued, offline-safe) ---------- */
 const KEY=()=>localStorage.getItem('appKey')||'';
@@ -234,15 +283,19 @@ addEventListener('online',()=>{sync();gen()});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
 
 /* ---------- tabs / boot ---------- */
-function render(){renderStudy();if(!$('#cards').hidden)renderList()}
+function render(){renderChips();renderStudy();fillCatSelect();if(!$('#cards').hidden)renderList()}
+function setTheme(t){localStorage.theme=t;document.documentElement.dataset.theme=t;
+ document.querySelector('meta[name=theme-color]').content=t==='light'?'#f4f1ec':'#000000'}
+document.querySelectorAll('[data-th]').forEach(b=>b.onclick=()=>setTheme(b.dataset.th));
+setTheme(localStorage.theme||'dark');
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected',x===b));
  document.querySelectorAll('main section').forEach(s=>s.hidden=s.id!==b.dataset.t);
- if(b.dataset.t==='cards')renderList();if(b.dataset.t==='study')renderStudy()});
+ if(b.dataset.t==='cards')renderList();if(b.dataset.t==='study'){renderChips();renderStudy()}});
 (async()=>{await open();$('#key').value=KEY();await refresh();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
  if(!KEY())document.querySelector('[data-t=set]').click();else{sync();gen()}
- setInterval(()=>{if(!shown)renderStudy()},60000)})();
+ setInterval(()=>{if(!shown){renderChips();renderStudy()}},60000)})();
 </script>
 </body>
 </html>
