@@ -228,6 +228,7 @@ const ICONS={
  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
  sync:'<path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/>',
+ flip:'<path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',
  theme:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'};
 const ico=k=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]||''}</svg>`;
 const ib=(attr,k,label,cls='',badge)=>`<button class="ib ${cls}" ${attr} title="${label}" aria-label="${label}">${ico(k)}${badge?`<span class="bg">${badge}</span>`:''}</button>`;
@@ -333,6 +334,7 @@ function renderList(){
  if(flat){const nr=openCat?cards.filter(c=>catOf(c)===openCat&&c.status!=='ready').length:0;
   h+=`<div class="catline">${ib('data-selmode',selMode?'done':'select',selMode?'Done':'Select',selMode?'on':'')}`
   +(openCat&&!selMode?ib('data-renamecat','rename','Rename')+ib('data-resetcat','reset','Reset review')
+   +(()=>{const t=cards.filter(c=>catOf(c)===openCat&&c.status==='ready'),a=t.length&&t.every(c=>c.rev);return t.length?ib('data-revcat','flip',a?'Restore normal order':'Reverse all cards',a?'on':''):''})()
    +(nr?ib('data-gencat','gen','Generate remaining','',nr):'')+ib('data-delcat','del','Delete all','danger'):'')+'</div>'}
  head.innerHTML=h;
  renderHeader();renderSelbar();
@@ -357,6 +359,9 @@ async function renameCat(){const n=(prompt('Category name',openCat)||'').trim();
 async function resetCat(){const t=cards.filter(c=>catOf(c)===openCat&&c.status==='ready');
  if(!t.length||!confirm(`Reset review for ${t.length} card${t.length>1?'s':''} in "${openCat}"?`))return;
  await resetCards(t);toast('Review reset')}
+async function reverseCat(){const t=cards.filter(c=>catOf(c)===openCat&&c.status==='ready');if(!t.length)return toast('No ready cards in this category');
+ const v=!t.every(c=>c.rev),now=Date.now();t.forEach(c=>{c.rev=v;c.updatedAt=now});
+ await putMany(t);cur=null;shown=false;await refresh();scheduleSync();toast(v?`${t.length} card${t.length>1?'s':''} reversed`:'Back to normal order')}
 async function deleteCat(){const n=openCat,t=cards.filter(c=>catOf(c)===n);
  if(!confirm(`Delete all ${t.length} cards in "${n}"?`))return;
  const now=Date.now();t.forEach(c=>{c.deleted=true;c.updatedAt=now});await putMany(t);if(studyCat===n)setStudyCat('');openCat=null;
@@ -367,6 +372,7 @@ $('#catHead').addEventListener('click',e=>{
  else if(e.target.closest('[data-gencat]'))requestGen(cards.filter(c=>catOf(c)===openCat));
  else if(e.target.closest('[data-renamecat]'))renameCat();
  else if(e.target.closest('[data-resetcat]'))resetCat();
+ else if(e.target.closest('[data-revcat]'))reverseCat();
  else if(e.target.closest('[data-delcat]'))deleteCat()});
 $('#list').addEventListener('click',async e=>{
  const g=k=>{const b=e.target.closest(`[data-${k}]`);return b&&cards.find(x=>x.id===b.dataset[k])};
@@ -397,7 +403,7 @@ function showSheet(a,title,pop){const d=$('#sheet');d.classList.toggle('pop',!!p
   const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close()};
  d.showModal()}
 $('#more').onclick=()=>{const a=[];
- if(tab==='cards'&&openCat)a.push(['Rename category',renameCat,0,'rename'],['Reset review',resetCat,0,'reset'],['Delete all cards',deleteCat,1,'del']);
+ if(tab==='cards'&&openCat)a.push(['Rename category',renameCat,0,'rename'],['Reset review',resetCat,0,'reset'],['Reverse all cards',reverseCat,0,'flip'],['Delete all cards',deleteCat,1,'del']);
  a.push(['Sync now',()=>sync(true),0,'sync',a.length],['Switch theme',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'),0,'theme']);
  showSheet(a,'',true)};
 
