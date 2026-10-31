@@ -432,6 +432,8 @@ async function gen(){
      if(r.status===401){stop=true;toast('Wrong access key');return}
      const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));c.data=j.data;c.status='ready';c.due=Date.now()}
     catch(e){if(!stop){c.status='error';c.err=String(e.message||e).slice(0,300);toast('AI error: '+c.err)}}
+    const cur=await new Promise(r=>{const q=store('readonly').get(c.id);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)});
+    if(cur&&cur.deleted)return;
     await save(c)}));
    await refresh();if(stop||!navigator.onLine)break}
  }finally{genBusy=false;$('#queue').textContent=cards.some(c=>c.status==='pending')&&!KEY()?'Enter the access key in Settings to generate cards.':''}
@@ -445,7 +447,7 @@ async function sync(manual){
  if(syncing)return;if(!KEY()){if(manual===true)toast('Enter the access key in Settings');return}
  if(!navigator.onLine){syncState('Offline — will sync when back online');if(manual===true)toast('You are offline');return}
  syncing=true;
- try{const since=+localStorage.since||0,lastPush=+localStorage.lastPush||0,t0=Date.now();
+ try{const OV=600000,full=manual===true,since=full?0:Math.max(0,(+localStorage.since||0)-OV),lastPush=full?0:Math.max(0,(+localStorage.lastPush||0)-OV),t0=Date.now();
   const all=await getAll();
   const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},
    body:JSON.stringify({cards:all.filter(c=>c.updatedAt>lastPush),since})});
