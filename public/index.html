@@ -347,9 +347,23 @@ function renderStudy(){
  const c=cur;
  if(shown&&(!recs||recs.id!==c.id)){const now=new Date();recs={id:c.id,now:+now,r:fsRepeat(fsLoad(c,now),now)}}
  el.innerHTML=`<div class="top"><span>${list.length} due</span><span>${sel.length} total</span></div>
- <div class="card">${shown?backHtml(c):`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>
+ <div class="card">${shown?backHtml(c)+`<div class="row" style="margin-top:14px"><button class="btn sm" id="exBtn">✨ Add 2 conversational examples</button></div>`:`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>
  ${shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(+recs.r[i+1].due-recs.now)}</small></button>`).join('')}<button class="s" data-r="skip">Skip<small>7 y</small></button></div>`
  :'<button class="btn pri show" id="showBtn">Show answer</button>'}`}
+let exBusy=false;
+async function addExamples(c){if(!c||!c.data||exBusy)return;
+ if(!KEY())return toast('Enter the access key in Settings first');if(!navigator.onLine)return toast('You are offline');
+ exBusy=true;const b=$('#exBtn');if(b){b.disabled=true;b.textContent='Generating…'}
+ try{const d=c.data,r=await fetch('/api/generate',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},
+   body:JSON.stringify({word:d.en||c.word,count:2,style:'conversational',examplesOnly:true})});
+  if(r.status===401)throw new Error('Wrong access key');
+  const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+  const have=new Set((d.examples||[]).map(x=>String(x.en||'').trim().toLowerCase()));
+  const add=((j.data&&j.data.examples)||j.examples||[]).filter(x=>x&&x.en&&x.fa&&!have.has(String(x.en).trim().toLowerCase())).slice(0,2).map(x=>({en:String(x.en).trim(),fa:String(x.fa).trim()}));
+  if(!add.length)throw new Error('No new examples came back');
+  d.examples=[...(d.examples||[]),...add];c.edited=true;await save(c);await refresh();cur=cards.find(x=>x.id===c.id)||cur;renderStudy();toast(`${add.length} example${add.length>1?'s':''} added`)}
+ catch(e){toast(String(e.message||e).slice(0,120),4000);renderStudy()}
+ finally{exBusy=false}}
 const autoSay=()=>{if(localStorage.auto!=='0'&&cur&&cur.data&&cur.data.en)speak(cur.data.en)};
 async function rate(k){if(!cur||!shown)return;if(k==='skip')return skipCard();if(!recs||recs.id!==cur.id)return;
  const c=cur,g={again:1,hard:2,good:3,easy:4}[k],nw=Date.now(),n=recs.r[g];
@@ -370,7 +384,8 @@ function openSkipped(){const l=skippedList();
 $('#sbody').addEventListener('click',e=>{
  const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
  const r=e.target.closest('[data-r]');if(r)return rate(r.dataset.r);
- if(e.target.id==='showBtn'){shown=true;recs=null;renderStudy();autoSay()}});
+ if(e.target.id==='showBtn'){shown=true;recs=null;renderStudy();autoSay()}
+ if(e.target.id==='exBtn')addExamples(cur)});
 document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select'))return;
  if($('#study').hidden||$('#dlg').open||$('#sheet').open)return;
  if(e.key===' '&&cur&&!shown){e.preventDefault();shown=true;recs=null;renderStudy();autoSay()}
@@ -692,6 +707,7 @@ function goRoot(){ // tapping the tab you are already on -> back to its first sc
  if($('#sheet').open)$('#sheet').close();if($('#dlg').open)$('#dlg').close();
  if(tab==='cards'){openCat=null;$('#q').value='';selMode=false;sel.clear();renderList()}
  if(tab==='set'&&spOpen){openSp(null);return}
+ if(tab==='study'&&shown){shown=false;recs=null;renderStudy()}
  toTop()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{b.dataset.t===tab?goRoot():go(b.dataset.t)});
 /* swipe from the left edge to the right = Back (like iPhone) */
