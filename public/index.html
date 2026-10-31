@@ -231,6 +231,7 @@ const ICONS={
  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
  plus:'<path d="M12 5v14M5 12h14"/>',
  sync:'<path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/>',
+ sort:'<path d="M4 7h9M4 12h6M4 17h3M17 5v14M14 16l3 3 3-3"/>',
  flip:'<path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/>',
  theme:'<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>'};
 const ico=k=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]||''}</svg>`;
@@ -309,7 +310,18 @@ function fsRet(card,now){if(!card.stability||card.state===0)return null;const el
 let cur=null,shown=false,recs=null,studyCat=localStorage.studyCat||'';
 const inStudy=c=>!studyCat||catOf(c)===studyCat;
 const setStudyCat=n=>{studyCat=n;try{localStorage.studyCat=n}catch{}};
-const dueList=()=>cards.filter(c=>isDue(c)&&inStudy(c)).sort((a,b)=>a.due-b.due);
+const catSort=n=>{try{return{k:'file',d:'asc',...(JSON.parse(localStorage.catSort||'{}')[n]||{})}}catch{return{k:'file',d:'asc'}}};
+const setCatSort=(n,o)=>{let m={};try{m=JSON.parse(localStorage.catSort||'{}')}catch{}m[n]={...catSort(n),...o};localStorage.catSort=JSON.stringify(m)};
+const cmpBy=(k,d)=>{const nm=(a,b)=>a.word.localeCompare(b.word,undefined,{sensitivity:'base'});
+ const f={alpha:nm,added:(a,b)=>(a.createdAt-b.createdAt)||((a.ord??-1)-(b.ord??-1))||nm(a,b),file:(a,b)=>((a.ord??-1)-(b.ord??-1))||(a.createdAt-b.createdAt)||nm(a,b)}[k]||nm;
+ return d==='desc'?(a,b)=>f(b,a):f};
+const sortCat=(l,n)=>{const o=catSort(n);return l.sort(cmpBy(o.k,o.d))};
+const isLearn=c=>!!c.fs&&(c.fs.state===1||c.fs.state===3),isNewCard=c=>!c.fs&&!(c.reps>0);
+function dueList(){const d=cards.filter(c=>isDue(c)&&inStudy(c));
+ const learn=d.filter(isLearn).sort((a,b)=>a.due-b.due),rev=d.filter(c=>!isLearn(c)&&!isNewCard(c)).sort((a,b)=>a.due-b.due),by={};
+ d.filter(isNewCard).forEach(c=>(by[catOf(c)]=by[catOf(c)]||[]).push(c));
+ const nw=Object.keys(by).sort((a,b)=>a.localeCompare(b)).flatMap(n=>sortCat(by[n],n));
+ return[...learn,...rev,...nw]}
 const frontOf=c=>{const d=c.data||{};if(c.rev&&d.en&&d.fa)return ARA.test(c.word)?d.en:d.fa;return c.word};
 function backHtml(c){const d=c.data||{};
  return `<div class="row"><span class="big en">${esc(d.en)}</span>
@@ -373,7 +385,7 @@ function renderHeader(){
 let selMode=false,sel=new Set();
 function visible(){const q=$('#q').value.trim().toLowerCase();
  const ok=c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q);
- return cards.filter(c=>(!openCat||catOf(c)===openCat)&&ok(c)).sort((a,b)=>b.createdAt-a.createdAt)}
+ const l=cards.filter(c=>(!openCat||catOf(c)===openCat)&&ok(c));return openCat?sortCat(l,openCat):l.sort((a,b)=>b.createdAt-a.createdAt)}
 function exitSel(){selMode=false;sel.clear();renderList()}
 function renderSelbar(){const b=$('#selbar');if(!selMode||tab!=='cards'){b.style.display='none';return}
  const n=sel.size,vis=visible(),nr=[...sel].filter(id=>{const c=cards.find(x=>x.id===id);return c&&c.status!=='ready'}).length;
@@ -396,7 +408,7 @@ function renderList(){
   h+=`<div class="pron" style="margin:8px 4px">${cs.length} card${cs.length===1?'':'s'} · ${cs.filter(isDue).length} due</div>`}
  if(flat){const nr=openCat?cards.filter(c=>catOf(c)===openCat&&c.status!=='ready').length:0;
   h+=`<div class="catline">${ib('data-selmode',selMode?'done':'select',selMode?'Done':'Select',selMode?'on':'')}`
-  +(openCat&&!selMode?ib('data-renamecat','rename','Rename')+ib('data-resetcat','reset','Reset review')
+  +(openCat&&!selMode?ib('data-renamecat','rename','Rename')+ib('data-resetcat','reset','Reset review')+ib('data-sortcat','sort','Sort')
    +(()=>{const t=cards.filter(c=>catOf(c)===openCat&&c.status==='ready'),a=t.length&&t.every(c=>c.rev);return t.length?ib('data-revcat','flip',a?'Restore normal order':'Reverse all cards',a?'on':''):''})()
    +(nr?ib('data-gencat','gen','Generate remaining','',nr):'')+ib('data-delcat','del','Delete all','danger'):'')+'</div>'}
  head.innerHTML=h;
@@ -419,10 +431,17 @@ $('#q').oninput=renderList;
 async function renameCat(){const n=(prompt('Category name',openCat)||'').trim();if(!n||n===openCat)return;
  const t=cards.filter(c=>catOf(c)===openCat),now=Date.now();t.forEach(c=>{c.cat=n;c.updatedAt=now});await putMany(t);
  if(studyCat===openCat)setStudyCat(n);
+ try{const m=JSON.parse(localStorage.catSort||'{}');if(m[openCat]){m[n]=m[openCat];delete m[openCat];localStorage.catSort=JSON.stringify(m)}}catch{}
  openCat=n;await refresh();scheduleSync();toast('Category renamed')}
 async function resetCat(){const t=cards.filter(c=>catOf(c)===openCat&&c.status==='ready');
  if(!t.length||!confirm(`Reset review for ${t.length} card${t.length>1?'s':''} in "${openCat}"?`))return;
  await resetCards(t);toast('Review reset')}
+function openSort(){const o=catSort(openCat);
+ $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Sort</b><button class="x" data-close aria-label="Close">✕</button></div>
+ <label for="sk">Sort by</label><select id="sk"><option value="file">Original order (import file)</option><option value="alpha">Alphabetical</option><option value="added">Date added</option></select>
+ <label for="sd">Direction</label><select id="sd"><option value="asc">Ascending</option><option value="desc">Descending</option></select>
+ <p class="pron" style="font-size:13px;margin-top:14px">Applies to this category's list and to the order new cards are introduced in Study.</p>`;
+ $('#sk').value=o.k;$('#sd').value=o.d;if(!$('#dlg').open)$('#dlg').showModal()}
 async function reverseCat(){const t=cards.filter(c=>catOf(c)===openCat&&c.status==='ready');if(!t.length)return toast('No ready cards in this category');
  const v=!t.every(c=>c.rev),now=Date.now();t.forEach(c=>{c.rev=v;c.updatedAt=now});
  await putMany(t);cur=null;shown=false;await refresh();scheduleSync();toast(v?`${t.length} card${t.length>1?'s':''} reversed`:'Back to normal order')}
@@ -436,6 +455,7 @@ $('#catHead').addEventListener('click',e=>{
  else if(e.target.closest('[data-gencat]'))requestGen(cards.filter(c=>catOf(c)===openCat));
  else if(e.target.closest('[data-renamecat]'))renameCat();
  else if(e.target.closest('[data-resetcat]'))resetCat();
+ else if(e.target.closest('[data-sortcat]'))openSort();
  else if(e.target.closest('[data-revcat]'))reverseCat();
  else if(e.target.closest('[data-delcat]'))deleteCat()});
 $('#list').addEventListener('click',async e=>{
@@ -510,6 +530,7 @@ $('#dlg').addEventListener('click',async e=>{
  if(v=at('delone')){const c=cards.find(x=>x.id===v);c.deleted=true;await save(c);$('#dlg').close();await refresh();return}
  if(t.closest('[data-close]')||t===$('#dlg'))$('#dlg').close()});
 $('#dlg').addEventListener('change',async e=>{
+ if(e.target.id==='sk'||e.target.id==='sd'){setCatSort(openCat,{k:$('#sk').value,d:$('#sd').value});renderList();return}
  if(e.target.id==='rv'){const c=cards.find(x=>x.id===e.target.dataset.id);if(!c)return;c.rev=e.target.checked;await save(c);await refresh();
   if(cur&&cur.id===c.id){cur=cards.find(x=>x.id===c.id)||null;shown=false;recs=null;renderStudy()}toast(c.rev?'Card reversed':'Card back to normal');return}
  if(e.target.id!=='mv')return;
@@ -520,10 +541,13 @@ $('#dlg').addEventListener('change',async e=>{
 /* ---------- add / import ---------- */
 async function addWords(ws,cat){
  cat=cat||'General';
- const have=new Set((await getAll()).filter(c=>!c.deleted).map(c=>c.id));let n=0,r=0;const now=Date.now(),out=[];
+ const all=(await getAll()).filter(c=>!c.deleted),have=new Set(all.map(c=>c.id)),exist=new Map(all.map(c=>[c.id,c]));let n=0,r=0,idx=0;const now=Date.now(),out=[];
+ const base=1+Math.max(-1,...all.filter(c=>catOf(c)===cat&&c.ord!=null).map(c=>c.ord));
  for(let it of ws){const o=it&&typeof it==='object'?it:null;let w=String(o?o.w:it).replace(/\s+/g,' ').trim();if(!w||w.length>60)continue;
-  const id=w.toLowerCase();if(have.has(id))continue;have.add(id);
-  const c={id,word:w,cat,status:'pending',due:now,interval:0,reps:0,createdAt:now,updatedAt:now};
+  const id=w.toLowerCase();
+  if(have.has(id)){const ex=exist.get(id);if(ex&&ex.ord==null&&catOf(ex)===cat){ex.ord=base+idx;ex.updatedAt=now;out.push(ex)}idx++;continue}
+  have.add(id);
+  const c={id,word:w,cat,status:'pending',due:now,interval:0,reps:0,createdAt:now,updatedAt:now,ord:base+idx++};
   if(o&&o.d&&o.d.en&&o.d.fa){c.status='ready';c.data=o.d;r++}
   out.push(c);n++}
  await putMany(out);localStorage.lastCat=cat;await refresh();$('#catSel').value=cat;$('#newCat').hidden=true;$('#newCat').value='';
