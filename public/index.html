@@ -99,13 +99,14 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .dot.on{background:var(--good)}
 dialog{border:0;background:var(--surf);color:var(--ink);width:100%;max-width:560px;margin:auto auto 0;padding:20px 18px calc(22px + env(safe-area-inset-bottom));border-radius:28px 28px 0 0;max-height:92vh;overflow:auto}
 dialog::backdrop{background:rgba(0,0,0,.6)}
-dialog.pop{position:fixed;inset:auto;top:var(--pt,60px);right:16px;left:auto;margin:0;width:min(249px,calc(100% - 32px));max-height:calc(100vh - var(--pt,60px) - 20px);padding:10px 0;border-radius:32px;background:linear-gradient(#262627,#202020 35%);--psep:#323232;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 8px 30px rgba(0,0,0,.45);overflow-y:auto}
+dialog.pop{position:fixed;inset:auto;top:var(--pt,60px);right:16px;left:auto;margin:0;width:min(229px,calc(100% - 32px));max-height:calc(100vh - var(--pt,60px) - 20px);padding:10px 0;border-radius:32px;background:linear-gradient(#262627,#202020 35%);--psep:#323232;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 8px 30px rgba(0,0,0,.45);overflow-y:auto}
 :root[data-theme=light] dialog.pop{background:linear-gradient(#f9f9fb,#f2f2f4 35%);--psep:#d9d9dc;box-shadow:0 8px 30px rgba(0,0,0,.18)}
 dialog.pop::backdrop{background:transparent}
-.pop .act{background:none;border-radius:0;margin:0;padding:8px 24px 8px 40px;font-size:14px;font-weight:400;gap:11px;line-height:20px}
+.pop .act{background:none;border-radius:0;margin:0;padding:8px 24px 8px 20px;font-size:14px;font-weight:400;gap:11px;line-height:20px}
+dialog.pop:focus-visible,.pop .act:focus,.pop .act:focus-visible{outline:0}
 .pop .act svg.i{width:20px;height:20px;stroke-width:1.6;flex:none}
 .pop .act.sep{margin-top:21px;padding-top:8px;border-top:0;position:relative}
-.pop .act.sep::before{content:"";position:absolute;top:-11px;left:24px;right:24px;height:1px;background:var(--psep)}
+.pop .act.sep::before{content:"";position:absolute;top:-11px;left:20px;right:20px;height:1px;background:var(--psep)}
 .act{display:flex;align-items:center;gap:12px;width:100%;text-align:start;border:0;background:var(--surf2);color:var(--ink);font:inherit;font-size:17px;padding:15px 18px;border-radius:16px;margin-top:8px;cursor:pointer}
 .ck{width:26px;height:26px;border-radius:50%;border:2px solid var(--mute);flex:none;display:grid;place-items:center}
 .ck.on{background:var(--acc);border-color:var(--acc)}
