@@ -334,7 +334,7 @@ $('#more').onclick=()=>{const a=[];
 function openDetail(id){const c=cards.find(x=>x.id===id);if(!c)return;
  const opts=cats().map(n=>`<option ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('')+'<option value="__new">+ New category…</option>';
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:12px"><b class="big" dir="auto">${esc(c.word)}</b><button class="x" data-close aria-label="Close">✕</button></div>`
-  +(c.status==='ready'?backHtml(c):`<p class="pron">${c.status==='error'?'Card generation failed. You can fill it in manually with Edit.':'Not generated yet.'}</p>`)
+  +(c.status==='ready'?backHtml(c):`<p class="pron">${c.status==='error'?'Card generation failed. You can fill it in manually with Edit.'+(c.err?`<br><small dir="ltr">${esc(c.err)}</small>`:''):'Not generated yet.'}</p>`)
   +`<label for="mv">Category</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
   +(c.status==='ready'?`<p class="pron" style="margin-top:12px">Next review: ${fmtDue(c.due)}</p>`:'')
   +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
@@ -430,8 +430,8 @@ async function gen(){
    await Promise.all(todo.map(async c=>{
     try{const r=await fetch('/api/generate',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},body:JSON.stringify({word:c.word})});
      if(r.status===401){stop=true;toast('Wrong access key');return}
-     const j=await r.json();if(!r.ok)throw 0;c.data=j.data;c.status='ready';c.due=Date.now()}
-    catch{if(!stop){c.status='error'}}
+     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));c.data=j.data;c.status='ready';c.due=Date.now()}
+    catch(e){if(!stop){c.status='error';c.err=String(e.message||e).slice(0,300);toast('AI error: '+c.err)}}
     await save(c)}));
    await refresh();if(stop||!navigator.onLine)break}
  }finally{genBusy=false;$('#queue').textContent=cards.some(c=>c.status==='pending')&&!KEY()?'Enter the access key in Settings to generate cards.':''}
