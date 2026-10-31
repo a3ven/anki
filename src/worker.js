@@ -38,7 +38,8 @@ function fallbackProviders(env) {
   if (env.GROQ_API_KEY)
     list.push({ name: "groq", url: "https://api.groq.com/openai/v1/chat/completions", key: env.GROQ_API_KEY, model: env.GROQ_MODEL || "openai/gpt-oss-120b" });
   if (env.OPENROUTER_API_KEY)
-    list.push({ name: "openrouter", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free" });
+    for (const m of [env.OPENROUTER_MODEL || "openrouter/free", "google/gemma-4-31b-it:free"])
+      list.push({ name: "openrouter", url: "https://openrouter.ai/api/v1/chat/completions", key: env.OPENROUTER_API_KEY, model: m });
   if (env.MISTRAL_API_KEY)
     list.push({ name: "mistral", url: "https://api.mistral.ai/v1/chat/completions", key: env.MISTRAL_API_KEY, model: env.MISTRAL_MODEL || "mistral-small-latest" });
   return list;
@@ -115,7 +116,11 @@ async function generate(env, word) {
     const r = await viaOpenAICompat(p, word, errs);
     if (r) return r;
   }
-  return { error: errs.join(" | ").slice(0, 500) };
+  // The app shows "quota used up" whenever the error text contains 4006. If fallbacks
+  // were tried, hide that code so the real fallback errors are shown instead.
+  const hasFallback = fallbackProviders(env).length > 0;
+  const msg = (hasFallback ? errs.slice().reverse() : errs).join(" | ").replace(hasFallback ? /4006/g : /$^/, "CF-quota");
+  return { error: msg.slice(0, 500) };
 }
 
 // ---------- storage: D1 (one row per card) ----------
