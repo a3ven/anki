@@ -1,5 +1,6 @@
 {
   "name": "anki",
+"workers_dev": true,
   "main": "src/worker.js",
   "compatibility_date": "2025-10-01",
   "assets": {
