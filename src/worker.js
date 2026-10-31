@@ -1,4 +1,3 @@
-const CHEAP = "@cf/meta/llama-3.1-8b-instruct";
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 const SYS = `You build flashcard data for a Persian speaker learning English.
@@ -29,6 +28,36 @@ function parse(out) {
   return JSON.parse(m[0]);
 }
 
+async function generate(env, word) {
+  const attempts = [
+    [MODEL, true],
+    [MODEL, false],
+    ["@cf/meta/llama-3.1-8b-instruct", false],
+  ];
+  const errs = [];
+  for (const [model, jm] of attempts) {
+    try {
+      const opts = {
+        messages: [
+          { role: "system", content: SYS },
+          { role: "user", content: JSON.stringify(word) },
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      };
+      if (jm) opts.response_format = { type: "json_object" };
+      const out = await env.AI.run(model, opts);
+      const d = parse(out);
+      if (!d.en || !d.fa) throw new Error("incomplete output");
+      d.examples = Array.isArray(d.examples) ? d.examples.slice(0, 3) : [];
+      return { data: d };
+    } catch (e) {
+      errs.push(`${model.split("/").pop()}${jm ? "+json" : ""}: ${String(e.message || e)}`);
+    }
+  }
+  return { error: errs.join(" | ").slice(0, 500) };
+}
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -39,33 +68,28 @@ export default {
     if (url.pathname === "/api/generate" && req.method === "POST") {
       const { word } = await req.json();
       if (!word || word.length > 80) return json({ error: "bad word" }, 400);
-      const attempts = [
-        [CHEAP, true],
-        [CHEAP, false],
-        [MODEL, true],
-      ];
-      const errs = [];
-      for (const [model, jm] of attempts) {
-        try {
-          const opts = {
-            messages: [
-              { role: "system", content: SYS },
-              { role: "user", content: JSON.stringify(word) },
-            ],
-            max_tokens: 1500,
-            temperature: 0.3,
-          };
-          if (jm) opts.response_format = { type: "json_object" };
-          const out = await env.AI.run(model, opts);
-          const d = parse(out);
-          if (!d.en || !d.fa) throw new Error("incomplete output");
-          d.examples = Array.isArray(d.examples) ? d.examples.slice(0, 3) : [];
-          return json({ data: d });
-        } catch (e) {
-          errs.push(`${model.split("/").pop()}${jm ? "+json" : ""}: ${String(e.message || e)}`);
-        }
-      }
-      return json({ error: errs.join(" | ").slice(0, 500) }, 502);
+      const r = await generate(env, word);
+      return r.error ? json({ error: r.error }, 502) : json({ data: r.data });
+    }
+
+    // For Apple Shortcuts: POST {"word": "..."} -> card is generated and saved in category "General"
+    if (url.pathname === "/api/add" && req.method === "POST") {
+      const body = await req.json().catch(() => ({}));
+      const word = String(body.word || "").replace(/\s+/g, " ").trim();
+      if (!word || word.length > 60) return json({ error: "bad word" }, 400);
+      const id = word.toLowerCase();
+      const store = (await env.SYNC.get("deck", "json")) || {};
+      if (store[id] && !store[id].deleted) return json({ ok: true, exists: true, word });
+      const r = await generate(env, word);
+      if (r.error) return json({ error: r.error }, 502);
+      const now = Date.now();
+      const fresh = (await env.SYNC.get("deck", "json")) || {};
+      fresh[id] = {
+        id, word, cat: "General", status: "ready", data: r.data,
+        due: now, interval: 0, reps: 0, createdAt: now, updatedAt: now, syncedAt: now,
+      };
+      await env.SYNC.put("deck", JSON.stringify(fresh));
+      return json({ ok: true, word, en: r.data.en, fa: r.data.fa });
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
