@@ -60,6 +60,19 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 .chip{font:inherit;font-size:14px;font-weight:600;border:0;background:var(--surf);color:var(--mute);border-radius:999px;padding:6px 14px;cursor:pointer}
 .chip[aria-pressed=true]{background:var(--acc);color:var(--onacc)}
 
+/* settings sections + switch */
+.sgrp{background:var(--surf);border-radius:20px;overflow:hidden}
+.srow{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;color:var(--ink);font:inherit;font-size:17px;padding:15px 16px;text-align:start;cursor:pointer}
+.srow+.srow{border-top:1px solid var(--line)}
+.srow svg.i{color:var(--acc);flex:none}
+.srow span{flex:1}
+.spg[hidden],#setHome[hidden]{display:none}
+.tg{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surf2);border-radius:16px;padding:12px 16px;margin-top:14px;font-size:15px;font-weight:600}
+.tg small{display:block;color:var(--mute);font-weight:500;font-size:12px}
+.sw{-webkit-appearance:none;appearance:none;width:51px;height:31px;border-radius:999px;background:var(--line);position:relative;flex:none;margin:0;cursor:pointer;transition:background .2s}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;transition:transform .2s}
+.sw:checked{background:var(--good)}.sw:checked::after{transform:translateX(20px)}
+
 /* forms */
 select,textarea,input[type=text],input[type=password],input[type=number]{width:100%;font:inherit;font-size:16px;background:var(--surf);color:var(--ink);border:0;border-radius:16px;padding:13px 16px}
 textarea{min-height:150px;resize:vertical}
@@ -148,20 +161,34 @@ dialog.pop:focus-visible,.pop .act:focus,.pop .act:focus-visible{outline:0}
   <div id="list"></div>
 </section>
 <section id="set" hidden>
-  <label for="key">Access key (the APP_KEY secret set on the Worker)</label>
-  <input type="password" id="key" autocomplete="off">
-  <div class="row" style="margin-top:12px">
-    <button class="btn pri" id="saveKey">Save &amp; sync</button>
-    <button class="btn" id="syncNow">Sync now</button>
+  <div id="setHome" class="sgrp">
+    <button class="srow" data-sp="sync"><svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/></svg><span>Sync</span><i class="chev">›</i></button>
+    <button class="srow" data-sp="look"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span>Appearance</span><i class="chev">›</i></button>
+    <button class="srow" data-sp="iv"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Review intervals</span><i class="chev">›</i></button>
+    <button class="srow" data-sp="voice"><svg class="i" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/></svg><span>Pronunciation</span><i class="chev">›</i></button>
   </div>
-  <p class="pron" style="margin-top:12px"><span class="dot" id="dot"></span><span id="syncState">—</span></p>
-  <label>Theme</label>
-  <div class="row"><button class="btn sm" data-th="dark">Black</button><button class="btn sm" data-th="light">Light</button></div>
-  <label>Review intervals (time until a card returns after each answer)</label>
-  <div id="ivBox"></div>
-  <label for="rate">Pronunciation speed</label>
-  <input type="range" id="rate" min="0.4" max="1" step="0.05">
-  <div class="row" style="margin-top:8px"><button class="btn sm" id="testSay">Test voice</button><span class="pron" id="rateVal"></span></div>
+  <div class="spg" id="sp_sync" hidden>
+    <label for="key" style="margin-top:4px">Access key (the APP_KEY secret set on the Worker)</label>
+    <input type="password" id="key" autocomplete="off">
+    <div class="row" style="margin-top:12px">
+      <button class="btn pri" id="saveKey">Save &amp; sync</button>
+      <button class="btn" id="syncNow">Sync now</button>
+    </div>
+    <p class="pron" style="margin-top:12px"><span class="dot" id="dot"></span><span id="syncState">—</span></p>
+  </div>
+  <div class="spg" id="sp_look" hidden>
+    <label style="margin-top:4px">Theme</label>
+    <div class="row"><button class="btn sm" data-th="dark">Black</button><button class="btn sm" data-th="light">Light</button></div>
+  </div>
+  <div class="spg" id="sp_iv" hidden>
+    <label style="margin-top:4px">Time until a card returns after each answer</label>
+    <div id="ivBox"></div>
+  </div>
+  <div class="spg" id="sp_voice" hidden>
+    <label for="rate" style="margin-top:4px">Pronunciation speed</label>
+    <input type="range" id="rate" min="0.4" max="1" step="0.05">
+    <div class="row" style="margin-top:8px"><button class="btn sm" id="testSay">Test voice</button><span class="pron" id="rateVal"></span></div>
+  </div>
 </section>
 </main>
 <nav role="tablist">
@@ -234,6 +261,7 @@ let cur=null,shown=false,studyCat=localStorage.studyCat||'';
 const inStudy=c=>!studyCat||catOf(c)===studyCat;
 const setStudyCat=n=>{studyCat=n;try{localStorage.studyCat=n}catch{}};
 const dueList=()=>cards.filter(c=>isDue(c)&&inStudy(c)).sort((a,b)=>a.due-b.due);
+const frontOf=c=>{const d=c.data||{};if(c.rev&&d.en&&d.fa)return ARA.test(c.word)?d.en:d.fa;return c.word};
 function backHtml(c){const d=c.data||{};
  return `<div class="row"><span class="big en">${esc(d.en)}</span>
  <button class="btn sm" data-say="${esc(d.en)}" aria-label="Play pronunciation">🔊</button>${d.pos?`<span class="tag">${esc(d.pos)}</span>`:''}</div>
@@ -256,7 +284,7 @@ function renderStudy(){
  if(!cur||!list.find(c=>c.id===cur.id))cur=list[0];
  const c=cur;
  el.innerHTML=`<div class="top"><span>${list.length} due</span><span>${sel.length} total</span></div>
- <div class="card">${shown?backHtml(c):`<div class="word" dir="auto">${esc(c.word)}</div>`}</div>
+ <div class="card">${shown?backHtml(c):`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>
  ${shown?`<div class="rate">${['again','hard','good','easy'].map(k=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(steps()[k])}</small></button>`).join('')}</div>`
  :'<button class="btn pri show" id="showBtn">Show answer</button>'}`}
 async function rate(k){if(!cur||!shown)return;const c=cur,iv=steps()[k];c.due=Date.now()+iv;c.interval=iv;c.reps=(c.reps||0)+1;
@@ -272,9 +300,12 @@ document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,sele
 
 /* ---------- cards tab: categories -> words ---------- */
 let openCat=null,tab='study';
+const SPN={sync:'Sync',look:'Appearance',iv:'Review intervals',voice:'Pronunciation'};let spOpen=null;
+function openSp(k){spOpen=k||null;$('#setHome').hidden=!!spOpen;document.querySelectorAll('.spg').forEach(g=>g.hidden=g.id!=='sp_'+spOpen);renderHeader();toTop()}
+$('#setHome').addEventListener('click',e=>{const b=e.target.closest('[data-sp]');if(b)openSp(b.dataset.sp)});
 function renderHeader(){
- $('#title').textContent={study:'Study',add:'Add',cards:openCat||'Cards',set:'Settings'}[tab];
- $('#back').style.visibility=(tab==='cards'&&openCat)?'visible':'hidden'}
+ $('#title').textContent={study:'Study',add:'Add',cards:openCat||'Cards',set:spOpen?SPN[spOpen]:'Settings'}[tab];
+ $('#back').style.visibility=((tab==='cards'&&openCat)||(tab==='set'&&spOpen))?'visible':'hidden'}
 let selMode=false,sel=new Set();
 function visible(){const q=$('#q').value.trim().toLowerCase();
  const ok=c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q);
@@ -358,7 +389,7 @@ $('#selbar').addEventListener('click',async e=>{const t=e.target.closest('button
   showSheet([...cats().map(n=>[n,()=>mv(n),0,'folder']),['New category…',()=>{const n=(prompt('New category name')||'').trim();if(n)mv(n)},0,'plus']],'Move to')}});
 
 /* ---------- header actions ---------- */
-$('#back').onclick=()=>{if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
+$('#back').onclick=()=>{if(tab==='set'&&spOpen){openSp(null);return}if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
 function showSheet(a,title,pop){const d=$('#sheet');d.classList.toggle('pop',!!pop);
  if(pop){const r=$('#more').getBoundingClientRect();d.style.setProperty('--pt',Math.round(r.top)+'px')}
  $('#sheetBody').innerHTML=(title?`<b class="big" style="display:block;margin-bottom:6px">${esc(title)}</b>`:'')+a.map((x,i)=>`<button class="act ${x[2]?'danger':''} ${x[4]?'sep':''}" data-i="${i}">${x[3]?ico(x[3]):''}<span>${esc(x[0])}</span></button>`).join('');
@@ -375,6 +406,7 @@ function openDetail(id){const c=cards.find(x=>x.id===id);if(!c)return;
  const opts=cats().map(n=>`<option ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('')+'<option value="__new">+ New category…</option>';
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:12px"><b class="big" dir="auto">${esc(c.word)}</b><button class="x" data-close aria-label="Close">✕</button></div>`
   +(c.status==='ready'?backHtml(c):`<p class="pron">${c.status==='error'?'Card generation failed. You can fill it in manually with Edit.'+(c.err?`<br><small dir="ltr">${esc(c.err)}</small>`:''):'Not generated yet.'}</p>`)
+  +(c.status==='ready'?`<label class="tg" for="rv"><span>Reverse this card<small>Show the meaning on the front, the word on the back</small></span><input type="checkbox" class="sw" id="rv" data-id="${esc(c.id)}"${c.rev?' checked':''}></label>`:'')
   +`<label for="mv">Category</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
   +(c.status==='ready'?`<p class="pron" style="margin-top:12px">Next review: ${fmtDue(c.due)}</p>`:'')
   +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
@@ -404,7 +436,10 @@ $('#dlg').addEventListener('click',async e=>{
  if(v=at('resetone')){await resetCards([cards.find(x=>x.id===v)]);$('#dlg').close();toast('Review reset');return}
  if(v=at('delone')){const c=cards.find(x=>x.id===v);c.deleted=true;await save(c);$('#dlg').close();await refresh();return}
  if(t.closest('[data-close]')||t===$('#dlg'))$('#dlg').close()});
-$('#dlg').addEventListener('change',async e=>{if(e.target.id!=='mv')return;
+$('#dlg').addEventListener('change',async e=>{
+ if(e.target.id==='rv'){const c=cards.find(x=>x.id===e.target.dataset.id);if(!c)return;c.rev=e.target.checked;await save(c);await refresh();
+  if(cur&&cur.id===c.id){cur=cards.find(x=>x.id===c.id)||null;shown=false;renderStudy()}toast(c.rev?'Card reversed':'Card back to normal');return}
+ if(e.target.id!=='mv')return;
  const c=cards.find(x=>x.id===e.target.dataset.id);let n=e.target.value;
  if(n==='__new'){n=(prompt('New category name')||'').trim();if(!n){openDetail(c.id);return}}
  c.cat=n;await save(c);await refresh();openDetail(c.id);toast('Moved to "'+n+'"')});
@@ -558,6 +593,7 @@ const toTop=()=>window.scrollTo({top:0,behavior:'smooth'});
 function goRoot(){ // tapping the tab you are already on -> back to its first screen
  if($('#sheet').open)$('#sheet').close();if($('#dlg').open)$('#dlg').close();
  if(tab==='cards'){openCat=null;$('#q').value='';selMode=false;sel.clear();renderList()}
+ if(tab==='set'&&spOpen){openSp(null);return}
  toTop()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{b.dataset.t===tab?goRoot():go(b.dataset.t)});
 /* swipe from the left edge to the right = Back (like iPhone) */
@@ -566,6 +602,7 @@ function goBack(){
  if($('#dlg').open){$('#dlg').close();return}
  if($('#imp').open){$('#impNo')&&$('#impNo').click();return}
  if(selMode){exitSel();return}
+ if(tab==='set'&&spOpen){openSp(null);return}
  if(tab==='cards'&&openCat){openCat=null;sel.clear();renderList();return}
  if(tab==='cards'&&$('#q').value){$('#q').value='';renderList();return}
  if(tab!=='study')go('study')}
@@ -575,7 +612,7 @@ document.addEventListener('touchend',e=>{if(!sOk)return;sOk=false;const t=e.chan
  if(dx>70&&dx>dy*1.5&&Date.now()-st<900)goBack()},{passive:true});
 (async()=>{await open();$('#key').value=KEY();await refresh();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
- if(!KEY())go('set');else sync()
+ if(!KEY()){go('set');openSp('sync')}else sync()
  setInterval(()=>{if(!shown&&tab==='study'){renderChips();renderStudy()}},60000)})();
 </script>
 </body>
