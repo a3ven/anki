@@ -452,11 +452,12 @@ async function sync(manual){
   const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},
    body:JSON.stringify({cards:all.filter(c=>c.updatedAt>lastPush),since})});
   if(r.status===401){syncState('Wrong access key');return}
+  if(!r.ok){let t='';try{t=(await r.json()).error||''}catch{}throw new Error('HTTP '+r.status+' '+t)}
   const j=await r.json();const local=new Map(all.map(c=>[c.id,c]));
   await putMany(j.cards.filter(c=>!local.has(c.id)||c.updatedAt>local.get(c.id).updatedAt));
   localStorage.since=j.now;localStorage.lastPush=t0;
   await refresh();syncState('Synced · '+new Date().toLocaleTimeString('en-US'),true);if(manual===true)toast('Synced');gen()
- }catch{syncState('Sync failed')}finally{syncing=false}}
+ }catch(e){syncState('Sync failed: '+String(e.message||e).slice(0,120))}finally{syncing=false}}
 $('#saveKey').onclick=()=>{localStorage.appKey=$('#key').value.trim();localStorage.since=0;localStorage.lastPush=0;sync(true);gen()};
 $('#syncNow').onclick=()=>sync(true);
 addEventListener('online',()=>{sync();gen()});
