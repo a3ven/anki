@@ -52,9 +52,11 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 .btn.sm.on,.btn.on{background:var(--acc);color:var(--onacc)}
 .danger{color:var(--again)}
 .show{width:100%;margin-top:14px;height:54px;font-size:17px}
-.rate{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
-.rate button{border:0;background:var(--surf);border-radius:20px;padding:12px 2px;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.rate{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:14px}
+.rate button{border:0;background:var(--surf);border-radius:20px;padding:12px 2px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .rate small{display:block;font-weight:500;color:var(--mute);font-size:12px}
+.rate .s{background:#48484a;color:#fff}.rate .s small{color:#c7c7cc}
+:root[data-theme=light] .rate .s{background:#c7c7cc;color:#3a3a3c}:root[data-theme=light] .rate .s small{color:#636366}
 .rate .a{color:var(--again)}.rate .h{color:var(--hard)}.rate .g{color:var(--good)}.rate .e{color:var(--easy)}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .chip{font:inherit;font-size:14px;font-weight:600;border:0;background:var(--surf);color:var(--mute);border-radius:999px;padding:6px 14px;cursor:pointer}
@@ -164,7 +166,7 @@ dialog.pop:focus-visible,.pop .act:focus,.pop .act:focus-visible{outline:0}
   <div id="setHome" class="sgrp">
     <button class="srow" data-sp="sync"><svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/></svg><span>Sync</span><i class="chev">›</i></button>
     <button class="srow" data-sp="look"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span>Appearance</span><i class="chev">›</i></button>
-    <button class="srow" data-sp="iv"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Review intervals</span><i class="chev">›</i></button>
+    <button class="srow" data-sp="iv"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Review (FSRS)</span><i class="chev">›</i></button>
     <button class="srow" data-sp="voice"><svg class="i" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/></svg><span>Pronunciation</span><i class="chev">›</i></button>
   </div>
   <div class="spg" id="sp_sync" hidden>
@@ -181,7 +183,7 @@ dialog.pop:focus-visible,.pop .act:focus,.pop .act:focus-visible{outline:0}
     <div class="row"><button class="btn sm" data-th="dark">Black</button><button class="btn sm" data-th="light">Light</button></div>
   </div>
   <div class="spg" id="sp_iv" hidden>
-    <label style="margin-top:4px">Time until a card returns after each answer</label>
+    <label style="margin-top:4px">Desired retention</label>
     <div id="ivBox"></div>
   </div>
   <div class="spg" id="sp_voice" hidden>
@@ -212,6 +214,7 @@ const fmtIv=ms=>{const m=ms/MIN;if(m<60)return Math.round(m)+' min';if(m<1440){c
  const y=Math.round(d/365*10)/10;return y+(y===1?' year':' years')};
 const NAME={again:'Again',hard:'Hard',good:'Good',easy:'Easy'};
 const LIB={xlsx:'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+ fsrs:'https://cdn.jsdelivr.net/npm/ts-fsrs@4/dist/index.umd.js',
  zip:'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
  sql:'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js',
  sqlBase:'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/'};
@@ -257,11 +260,53 @@ const catOf=c=>{const k=c.cat||'General';return k==='عمومی'?'General':k};
 const cats=()=>[...new Set(cards.map(catOf))].sort((a,b)=>a.localeCompare(b));
 const isDue=c=>c.status==='ready'&&c.due<=Date.now();
 async function resetCards(list){const now=Date.now();
- list.forEach(c=>{if(c.status==='ready'){c.due=now;c.interval=0;c.reps=0}c.updatedAt=now});
+ list.forEach(c=>{if(c.status==='ready'){c.due=now;c.interval=0;c.reps=0;delete c.fs;delete c.hist;c.skipped=false;delete c.skippedAt}c.updatedAt=now});
  await putMany(list);cur=null;shown=false;await refresh();scheduleSync()}
 
+/* ---------- FSRS (ts-fsrs; built-in FSRS-5 copy used only if the library cannot load) ---------- */
+const SKIP_DAYS=2555; // 7 years
+const DR=()=>{const v=+localStorage.dr;return v>=.7&&v<=.99?v:.9};
+const FW=[0.40255,1.18385,3.173,15.69105,7.1949,0.5345,1.4604,0.0046,1.54575,0.1192,1.01925,1.9395,0.11,0.29605,2.2698,0.2315,2.9898,0.51655,0.6621];
+const fsClamp=(x,a,b)=>Math.min(Math.max(x,a),b);
+const FSX={F:19/81,C:-.5,R(t,S){return Math.pow(1+this.F*t/S,this.C)},I(r,S){return S/this.F*(Math.pow(r,1/this.C)-1)},
+ D0(g){return fsClamp(FW[4]-Math.exp(FW[5]*(g-1))+1,1,10)},
+ nD(D,g){return fsClamp(FW[7]*this.D0(4)+(1-FW[7])*(D+(-FW[6]*(g-3))*(10-D)/9),1,10)},
+ rS(D,S,R,g){return S*(1+Math.exp(FW[8])*(11-D)*Math.pow(S,-FW[9])*(Math.exp((1-R)*FW[10])-1)*(g===2?FW[15]:1)*(g===4?FW[16]:1))},
+ fS(D,S,R){return fsClamp(Math.min(FW[11]*Math.pow(D,-FW[12])*(Math.pow(S+1,FW[13])-1)*Math.exp((1-R)*FW[14]),S/Math.exp(FW[17]*FW[18])),.01,36500)},
+ sS(S,g){return Math.max(.01,S*Math.exp(FW[17]*(g-3+FW[18])))}};
+const fsLib=()=>window.FSRS&&FSRS.fsrs&&FSRS.createEmptyCard?FSRS:null;
+const fsNewCard=now=>fsLib()?fsLib().createEmptyCard(now):{due:now,stability:0,difficulty:0,elapsed_days:0,scheduled_days:0,reps:0,lapses:0,state:0,last_review:undefined};
+const fsLoad=(c,now)=>{const f=c.fs;if(!f)return fsNewCard(now);return{...f,due:new Date(f.due),last_review:f.last_review?new Date(f.last_review):undefined}};
+const fsSave=k=>({...k,due:+new Date(k.due),last_review:k.last_review?+new Date(k.last_review):null});
+function fsBuiltin(card,now){
+ const rr=DR(),t=+new Date(now),last=card.last_review?+new Date(card.last_review):null,el=last?Math.max(0,Math.floor((t-last)/DAY)):0;
+ const iv=s=>Math.min(36500,Math.max(1,Math.round(FSX.I(rr,s))));
+ const mk=o=>({...card,elapsed_days:el,last_review:new Date(t),reps:card.reps+1,...o}),mins=m=>new Date(t+m*MIN),days=n=>new Date(t+n*DAY),out={};
+ if(card.state===0){
+  for(let g=1;g<=4;g++){const S=Math.max(FW[g-1],.1),D=FSX.D0(g);
+   out[g]=g===4?mk({stability:S,difficulty:D,state:2,scheduled_days:iv(S),due:days(iv(S))}):mk({stability:S,difficulty:D,state:1,scheduled_days:0,due:mins([1,5,10][g-1])})}
+  return out}
+ const S=card.stability,D=card.difficulty,R=FSX.R(el,S);
+ if(card.state===1||card.state===3){
+  const Sg=FSX.sS(S,3),ig=iv(Sg),Se=FSX.sS(S,4),ie=Math.max(iv(Se),ig+1);
+  for(let g=1;g<=4;g++){const D2=FSX.nD(D,g);
+   out[g]=g<=2?mk({stability:FSX.sS(S,g),difficulty:D2,state:card.state,scheduled_days:0,due:mins(g===1?5:10)})
+    :mk({stability:g===3?Sg:Se,difficulty:D2,state:2,scheduled_days:g===3?ig:ie,due:days(g===3?ig:ie)})}
+  return out}
+ const Sh=FSX.rS(D,S,R,2),Sg=FSX.rS(D,S,R,3),Se=FSX.rS(D,S,R,4);
+ const ih=Math.min(iv(Sh),iv(Sg)),ig=Math.max(iv(Sg),ih+1),ie=Math.max(iv(Se),ig+1);
+ out[1]=mk({stability:FSX.fS(D,S,R),difficulty:FSX.nD(D,1),state:3,lapses:card.lapses+1,scheduled_days:0,due:mins(5)});
+ out[2]=mk({stability:Sh,difficulty:FSX.nD(D,2),state:2,scheduled_days:ih,due:days(ih)});
+ out[3]=mk({stability:Sg,difficulty:FSX.nD(D,3),state:2,scheduled_days:ig,due:days(ig)});
+ out[4]=mk({stability:Se,difficulty:FSX.nD(D,4),state:2,scheduled_days:ie,due:days(ie)});
+ return out}
+function fsRepeat(card,now){const L=fsLib();
+ if(L){try{const r=L.fsrs(L.generatorParameters({request_retention:DR()})).repeat(card,now);const R=L.Rating;return{1:r[R.Again].card,2:r[R.Hard].card,3:r[R.Good].card,4:r[R.Easy].card}}catch(e){console.warn('ts-fsrs failed, using built-in FSRS',e)}}
+ return fsBuiltin(card,now)}
+function fsRet(card,now){if(!card.stability||card.state===0)return null;const el=Math.max(0,(+now-+new Date(card.last_review||card.due))/DAY);return FSX.R(el,card.stability)}
+
 /* ---------- study ---------- */
-let cur=null,shown=false,studyCat=localStorage.studyCat||'';
+let cur=null,shown=false,recs=null,studyCat=localStorage.studyCat||'';
 const inStudy=c=>!studyCat||catOf(c)===studyCat;
 const setStudyCat=n=>{studyCat=n;try{localStorage.studyCat=n}catch{}};
 const dueList=()=>cards.filter(c=>isDue(c)&&inStudy(c)).sort((a,b)=>a.due-b.due);
@@ -287,24 +332,39 @@ function renderStudy(){
   el.innerHTML=`<div class="empty">You're all caught up 🎉<br>${next?'Next card: '+fmtDue(next.due):''}${pend?`<br>${pend} card${pend>1?'s':''} waiting to be generated`:''}</div>`;cur=null;return}
  if(!cur||!list.find(c=>c.id===cur.id))cur=list[0];
  const c=cur;
+ if(shown&&(!recs||recs.id!==c.id)){const now=new Date();recs={id:c.id,now:+now,r:fsRepeat(fsLoad(c,now),now)}}
  el.innerHTML=`<div class="top"><span>${list.length} due</span><span>${sel.length} total</span></div>
  <div class="card">${shown?backHtml(c):`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>
- ${shown?`<div class="rate">${['again','hard','good','easy'].map(k=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(steps()[k])}</small></button>`).join('')}</div>`
+ ${shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(+recs.r[i+1].due-recs.now)}</small></button>`).join('')}<button class="s" data-r="skip">Skip<small>7 y</small></button></div>`
  :'<button class="btn pri show" id="showBtn">Show answer</button>'}`}
-async function rate(k){if(!cur||!shown)return;const c=cur,iv=steps()[k];c.due=Date.now()+iv;c.interval=iv;c.reps=(c.reps||0)+1;
- shown=false;cur=null;await save(c);await refresh()}
+async function rate(k){if(!cur||!shown)return;if(k==='skip')return skipCard();if(!recs||recs.id!==cur.id)return;
+ const c=cur,g={again:1,hard:2,good:3,easy:4}[k],nw=Date.now(),n=recs.r[g];
+ c.fs=fsSave(n);c.due=c.fs.due;c.interval=c.fs.due-nw;c.reps=n.reps;c.skipped=false;delete c.skippedAt;
+ (c.hist=c.hist||[]).push([nw,g]);if(c.hist.length>40)c.hist.shift();
+ shown=false;cur=null;recs=null;await save(c);await refresh()}
+/* Skip: independent of FSRS - the memory state (c.fs) is not touched */
+async function skipCard(){const c=cur;if(!c)return;const nw=Date.now();
+ c.skipped=true;c.skippedAt=nw;c.due=nw+SKIP_DAYS*DAY;
+ shown=false;cur=null;recs=null;await save(c);await refresh();toast('Skipped for 7 years')}
+async function unskip(list){const nw=Date.now();list.forEach(c=>{c.skipped=false;delete c.skippedAt;c.due=c.fs?c.fs.due:nw;c.updatedAt=nw});await putMany(list);cur=null;shown=false;recs=null;await refresh();scheduleSync()}
+const skippedList=()=>cards.filter(c=>c.skipped&&c.due>Date.now()).sort((x,y)=>x.due-y.due);
+function openSkipped(){const l=skippedList();
+ $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:8px"><b class="big">Skipped cards</b><button class="x" data-close aria-label="Close">✕</button></div>`
+  +(l.length?l.map(c=>`<div class="it"><div class="bd"><div class="tx"><b dir="auto">${esc(c.word)}</b><small>returns ${new Date(c.due).toLocaleDateString('en-US')}</small></div><button class="btn sm" data-unskip="${esc(c.id)}">Return</button></div></div>`).join('')
+   +`<div class="row" style="margin-top:14px"><button class="btn" data-unskipall>Return all (${l.length})</button></div>`:'<div class="empty">No skipped cards.</div>');
+ if(!$('#dlg').open)$('#dlg').showModal()}
 $('#sbody').addEventListener('click',e=>{
  const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
  const r=e.target.closest('[data-r]');if(r)return rate(r.dataset.r);
- if(e.target.id==='showBtn'){shown=true;renderStudy()}});
+ if(e.target.id==='showBtn'){shown=true;recs=null;renderStudy()}});
 document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select'))return;
  if($('#study').hidden||$('#dlg').open||$('#sheet').open)return;
- if(e.key===' '&&cur&&!shown){e.preventDefault();shown=true;renderStudy()}
- else if(shown&&'1234'.includes(e.key))rate(['again','hard','good','easy'][+e.key-1])});
+ if(e.key===' '&&cur&&!shown){e.preventDefault();shown=true;recs=null;renderStudy()}
+ else if(shown&&'12345'.includes(e.key))rate(['again','hard','good','easy','skip'][+e.key-1])});
 
 /* ---------- cards tab: categories -> words ---------- */
 let openCat=null,tab='study';
-const SPN={sync:'Sync',look:'Appearance',iv:'Review intervals',voice:'Pronunciation'};let spOpen=null;
+const SPN={sync:'Sync',look:'Appearance',iv:'Review (FSRS)',voice:'Pronunciation'};let spOpen=null;
 function openSp(k){spOpen=k||null;$('#setHome').hidden=!!spOpen;document.querySelectorAll('.spg').forEach(g=>g.hidden=g.id!=='sp_'+spOpen);renderHeader();toTop()}
 $('#setHome').addEventListener('click',e=>{const b=e.target.closest('[data-sp]');if(b)openSp(b.dataset.sp)});
 function renderHeader(){
@@ -344,11 +404,12 @@ function renderList(){
  if(!flat){const l=cats();
   list.innerHTML=l.length?l.map(n=>{const cs=cards.filter(c=>catOf(c)===n);
    return `<div class="it" data-open="${esc(n)}"><div class="ic f">${FOLDER}</div><div class="bd"><div class="tx"><b>${esc(n)}</b><small>${cs.length} card${cs.length===1?'':'s'} · ${cs.filter(isDue).length} due</small></div><span class="chev">›</span></div></div>`}).join('')
+   +(()=>{const k=skippedList().length;return k?`<div class="it" data-skipped="1"><div class="ic f" style="color:var(--mute)"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v5l4 2-.8 1.8L11 13V7z"/></svg></div><div class="bd"><div class="tx"><b>Skipped</b><small>${k} card${k===1?'':'s'} · hidden from review</small></div><span class="chev">›</span></div></div>`:''})()
    +`<div class="count">${l.length} categor${l.length===1?'y':'ies'}</div>`
    :'<div class="empty">No categories yet.</div>';return}
  const l=visible();
  list.innerHTML=l.length?l.map(c=>`<div class="it" data-id="${esc(c.id)}">${selMode?`<div class="ck ${sel.has(c.id)?'on':''}"></div>`:''}<div class="ic">${esc([...c.word][0]||'?').toUpperCase()}</div>
-  <div class="bd"><div class="tx"><b>${esc(c.word)}</b><small>${openCat?'':esc(catOf(c))+' · '}${c.status==='ready'?fmtDue(c.due):c.status==='error'?'error — not generated':'pending'}</small></div>
+  <div class="bd"><div class="tx"><b>${esc(c.word)}</b><small>${openCat?'':esc(catOf(c))+' · '}${c.status==='ready'?(c.skipped&&c.due>Date.now()?'Skipped · ':'')+fmtDue(c.due):c.status==='error'?'error — not generated':'pending'}</small></div>
   ${selMode?'':`${c.status==='error'?`<button class="x" data-retry="${esc(c.id)}" title="Generate" aria-label="Generate">↻</button>`:''}
   ${c.status==='ready'?`<button class="x" data-reset="${esc(c.id)}" title="Reset review" aria-label="Reset review">⟲</button>`:''}
   <button class="x" data-del="${esc(c.id)}" aria-label="Delete">✕</button>`}</div></div>`).join('')
@@ -383,6 +444,7 @@ $('#list').addEventListener('click',async e=>{
  if(c=g('del')){c.deleted=true;await save(c);await refresh();return}
  if(c=g('retry')){await gen([c]);return}
  if(c=g('reset')){await resetCards([c]);toast('Review reset');return}
+ if(e.target.closest('[data-skipped]')){openSkipped();return}
  const o=e.target.closest('[data-open]');if(o){openCat=o.dataset.open;$('#q').value='';renderList();return}
  const it=e.target.closest('[data-id]');if(!it)return;
  if(selMode){const id=it.dataset.id;sel.has(id)?sel.delete(id):sel.add(id);renderList()}else openDetail(it.dataset.id)});
@@ -417,8 +479,8 @@ function openDetail(id){const c=cards.find(x=>x.id===id);if(!c)return;
   +(c.status==='ready'?backHtml(c):`<p class="pron">${c.status==='error'?'Card generation failed. You can fill it in manually with Edit.'+(c.err?`<br><small dir="ltr">${esc(c.err)}</small>`:''):'Not generated yet.'}</p>`)
   +(c.status==='ready'?`<label class="tg" for="rv"><span>Reverse this card<small>Show the meaning on the front, the word on the back</small></span><input type="checkbox" class="sw" id="rv" data-id="${esc(c.id)}"${c.rev?' checked':''}></label>`:'')
   +`<label for="mv">Category</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
-  +(c.status==='ready'?`<p class="pron" style="margin-top:12px">Next review: ${fmtDue(c.due)}</p>`:'')
-  +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
+  +(c.status==='ready'?`<p class="pron" style="margin-top:12px">${c.skipped&&c.due>Date.now()?`Skipped — returns ${new Date(c.due).toLocaleDateString('en-US')}`:'Next review: '+fmtDue(c.due)}${c.fs&&c.fs.stability>0?(()=>{const r=fsRet(c.fs,Date.now());return `<br><small>Stability ${c.fs.stability.toFixed(1)} d · Difficulty ${c.fs.difficulty.toFixed(1)}${r==null?'':' · Retrievability '+Math.round(r*100)+'%'}</small>`})():''}</p>`:'')
+  +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}${c.skipped&&c.due>Date.now()?`<button class="btn" data-unskip="${esc(c.id)}">Return to review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
  if(!$('#dlg').open)$('#dlg').showModal()}
 function openEdit(id){const c=cards.find(x=>x.id===id);if(!c)return;const d=c.data||{};
  const ex=[...(d.examples||[]),{},{},{}].slice(0,3);
@@ -440,6 +502,8 @@ $('#dlg').addEventListener('click',async e=>{
  if(t.closest('[data-say]'))return speak(t.closest('[data-say]').dataset.say);
  if(v=at('gen')){$('#dlg').close();await requestGen([cards.find(x=>x.id===v)]);return}
  if(v=at('edit'))return openEdit(v);
+ if(v=at('unskip')){await unskip([cards.find(x=>x.id===v)]);if(skippedList().length&&$('#dlgBody').textContent.includes('Skipped cards'))openSkipped();else $('#dlg').close();toast('Back in review');return}
+ if(t.closest('[data-unskipall]')){await unskip(skippedList());$('#dlg').close();toast('Back in review');return}
  if(v=at('cancel'))return openDetail(v);
  if(v=at('saveedit'))return saveEdit(v);
  if(v=at('resetone')){await resetCards([cards.find(x=>x.id===v)]);$('#dlg').close();toast('Review reset');return}
@@ -447,7 +511,7 @@ $('#dlg').addEventListener('click',async e=>{
  if(t.closest('[data-close]')||t===$('#dlg'))$('#dlg').close()});
 $('#dlg').addEventListener('change',async e=>{
  if(e.target.id==='rv'){const c=cards.find(x=>x.id===e.target.dataset.id);if(!c)return;c.rev=e.target.checked;await save(c);await refresh();
-  if(cur&&cur.id===c.id){cur=cards.find(x=>x.id===c.id)||null;shown=false;renderStudy()}toast(c.rev?'Card reversed':'Card back to normal');return}
+  if(cur&&cur.id===c.id){cur=cards.find(x=>x.id===c.id)||null;shown=false;recs=null;renderStudy()}toast(c.rev?'Card reversed':'Card back to normal');return}
  if(e.target.id!=='mv')return;
  const c=cards.find(x=>x.id===e.target.dataset.id);let n=e.target.value;
  if(n==='__new'){n=(prompt('New category name')||'').trim();if(!n){openDetail(c.id);return}}
@@ -584,15 +648,12 @@ $('#rate').value=rateVal();$('#rateVal').textContent=rateVal().toFixed(2)+'×';
 $('#rate').oninput=e=>{localStorage.rate=e.target.value;$('#rateVal').textContent=(+e.target.value).toFixed(2)+'×'};
 $('#rate').onchange=()=>speak('The quick brown fox');
 $('#testSay').onclick=()=>speak('The quick brown fox jumps over the lazy dog');
-function renderIntervals(){const s=steps();
- $('#ivBox').innerHTML=['again','hard','good','easy'].map(k=>{const ms=s[k];let u=MIN;if(ms%DAY===0)u=DAY;else if(ms%36e5===0)u=36e5;
-  return `<div class="iv"><span style="color:var(--${k})">${NAME[k]}</span><input type="number" min="0.1" step="any" inputmode="decimal" data-ivk="${k}" value="${ms/u}" aria-label="${NAME[k]} interval">
-  <select data-ivu="${k}" aria-label="${NAME[k]} unit"><option value="${MIN}" ${u===MIN?'selected':''}>minutes</option><option value="${36e5}" ${u===36e5?'selected':''}>hours</option><option value="${DAY}" ${u===DAY?'selected':''}>days</option></select></div>`}).join('')
-  +'<div class="row" style="margin-top:12px"><button class="btn sm" id="ivReset">Reset to defaults</button></div>'}
-$('#ivBox').addEventListener('change',()=>{const out={};
- for(const k of ['again','hard','good','easy']){const n=Math.max(.1,+$(`[data-ivk=${k}]`).value||1);out[k]=Math.round(n*+$(`[data-ivu=${k}]`).value)}
- localStorage.steps=JSON.stringify(out);toast('Intervals saved');renderIntervals();renderStudy()});
-$('#ivBox').addEventListener('click',e=>{if(e.target.id==='ivReset'){delete localStorage.steps;renderIntervals();renderStudy();toast('Defaults restored')}});
+function renderIntervals(){
+ $('#ivBox').innerHTML=`<div class="iv"><input type="number" min="70" max="99" step="1" inputmode="numeric" id="drIn" value="${Math.round(DR()*100)}" aria-label="Desired retention" style="max-width:110px"><span>%</span></div>
+ <p class="pron" style="font-size:13px;margin-top:10px">The chance you want to still remember a card when it comes back (default 90%). Higher = more reviews. Intervals are calculated per card from its Stability and Difficulty.<br>Engine: ${fsLib()?'ts-fsrs':'built-in FSRS-5 (ts-fsrs could not be loaded)'}</p>
+ <div class="row" style="margin-top:12px"><button class="btn sm" id="ivReset">Reset to 90%</button></div>`}
+$('#ivBox').addEventListener('change',e=>{if(e.target.id!=='drIn')return;const v=fsClamp(Math.round(+e.target.value||90),70,99);localStorage.dr=v/100;toast('Desired retention '+v+'%');recs=null;renderIntervals();renderStudy()});
+$('#ivBox').addEventListener('click',e=>{if(e.target.id==='ivReset'){delete localStorage.dr;recs=null;renderIntervals();renderStudy();toast('Back to 90%')}});
 renderIntervals();
 function render(){renderChips();renderStudy();fillCatSelect();if(!$('#cards').hidden)renderList()}
 function go(t){tab=t;selMode=false;sel.clear();
@@ -620,6 +681,7 @@ let sx=0,sy=0,st=0,sOk=false;
 document.addEventListener('touchstart',e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY;st=Date.now();sOk=e.touches.length===1&&sx<=48},{passive:true});
 document.addEventListener('touchend',e=>{if(!sOk)return;sOk=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=Math.abs(t.clientY-sy);
  if(dx>70&&dx>dy*1.5&&Date.now()-st<900)goBack()},{passive:true});
+load(LIB.fsrs).then(()=>{recs=null;renderIntervals();if(!$('#study').hidden)renderStudy()}).catch(()=>{});
 (async()=>{await open();$('#key').value=KEY();await refresh();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
  if(!KEY()){go('set');openSp('sync')}else sync()
