@@ -544,7 +544,25 @@ function go(t){tab=t;selMode=false;sel.clear();
  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected',x.dataset.t===t));
  document.querySelectorAll('main section').forEach(s=>s.hidden=s.id!==t);
  if(t==='cards')renderList();if(t==='study'){renderChips();renderStudy()}renderHeader();renderSelbar()}
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.t));
+const toTop=()=>window.scrollTo({top:0,behavior:'smooth'});
+function goRoot(){ // tapping the tab you are already on -> back to its first screen
+ if($('#sheet').open)$('#sheet').close();if($('#dlg').open)$('#dlg').close();
+ if(tab==='cards'){openCat=null;$('#q').value='';selMode=false;sel.clear();renderList()}
+ toTop()}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{b.dataset.t===tab?goRoot():go(b.dataset.t)});
+/* swipe from the left edge to the right = Back (like iPhone) */
+function goBack(){
+ if($('#sheet').open){$('#sheet').close();return}
+ if($('#dlg').open){$('#dlg').close();return}
+ if($('#imp').open){$('#impNo')&&$('#impNo').click();return}
+ if(selMode){exitSel();return}
+ if(tab==='cards'&&openCat){openCat=null;sel.clear();renderList();return}
+ if(tab==='cards'&&$('#q').value){$('#q').value='';renderList();return}
+ if(tab!=='study')go('study')}
+let sx=0,sy=0,st=0,sOk=false;
+document.addEventListener('touchstart',e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY;st=Date.now();sOk=e.touches.length===1&&sx<=48},{passive:true});
+document.addEventListener('touchend',e=>{if(!sOk)return;sOk=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=Math.abs(t.clientY-sy);
+ if(dx>70&&dx>dy*1.5&&Date.now()-st<900)goBack()},{passive:true});
 (async()=>{await open();$('#key').value=KEY();await refresh();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
  if(!KEY())go('set');else sync()
