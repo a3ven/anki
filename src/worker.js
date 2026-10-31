@@ -1,3 +1,4 @@
+const CHEAP = "@cf/meta/llama-3.1-8b-instruct";
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 const SYS = `You build flashcard data for a Persian speaker learning English.
@@ -39,9 +40,9 @@ export default {
       const { word } = await req.json();
       if (!word || word.length > 80) return json({ error: "bad word" }, 400);
       const attempts = [
+        [CHEAP, true],
+        [CHEAP, false],
         [MODEL, true],
-        [MODEL, false],
-        ["@cf/meta/llama-3.1-8b-instruct", false],
       ];
       const errs = [];
       for (const [model, jm] of attempts) {
