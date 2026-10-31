@@ -32,7 +32,7 @@ async function generate(env, word) {
   const attempts = [
     [MODEL, true],
     [MODEL, false],
-    ["@cf/meta/llama-3.1-8b-instruct", false],
+    ["@cf/google/gemma-4-26b-a4b-it", false],
   ];
   const errs = [];
   for (const [model, jm] of attempts) {
@@ -52,7 +52,9 @@ async function generate(env, word) {
       d.examples = Array.isArray(d.examples) ? d.examples.slice(0, 3) : [];
       return { data: d };
     } catch (e) {
-      errs.push(`${model.split("/").pop()}${jm ? "+json" : ""}: ${String(e.message || e)}`);
+      const m = String(e.message || e);
+      errs.push(`${model.split("/").pop()}${jm ? "+json" : ""}: ${m}`);
+      if (m.includes("4006")) break; // daily quota used up: other models share it
     }
   }
   return { error: errs.join(" | ").slice(0, 500) };
