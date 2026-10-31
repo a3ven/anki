@@ -60,6 +60,41 @@ async function generate(env, word) {
   return { error: errs.join(" | ").slice(0, 500) };
 }
 
+// ---------- storage: D1 (one row per card) ----------
+let ready = false;
+async function initDb(env) {
+  if (ready) return;
+  await env.DB.batch([
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS cards (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL, synced_at INTEGER NOT NULL)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cards_synced ON cards (synced_at)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)"),
+  ]);
+  // one-time import of the old KV deck (if the KV binding still exists)
+  const done = await env.DB.prepare("SELECT v FROM meta WHERE k='kv_imported'").first();
+  if (!done) {
+    if (env.SYNC) {
+      const old = (await env.SYNC.get("deck", "json")) || {};
+      const now = Date.now();
+      const rows = Object.values(old).filter((c) => c && c.id);
+      for (let i = 0; i < rows.length; i += 50) {
+        await env.DB.batch(
+          rows.slice(i, i + 50).map((c) =>
+            env.DB.prepare("INSERT OR IGNORE INTO cards (id,data,updated_at,synced_at) VALUES (?,?,?,?)")
+              .bind(c.id, JSON.stringify(c), c.updatedAt || 0, now)
+          )
+        );
+      }
+    }
+    await env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('kv_imported','1')").run();
+  }
+  ready = true;
+}
+
+const UPSERT =
+  "INSERT INTO cards (id,data,updated_at,synced_at) VALUES (?,?,?,?) " +
+  "ON CONFLICT(id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at, synced_at=excluded.synced_at " +
+  "WHERE excluded.updated_at > cards.updated_at";
+
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -74,37 +109,48 @@ export default {
       return r.error ? json({ error: r.error }, 502) : json({ data: r.data });
     }
 
+    try {
+      await initDb(env);
+    } catch (e) {
+      return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
+    }
+
     // For Apple Shortcuts: POST {"word": "..."} -> card is generated and saved in category "General"
     if (url.pathname === "/api/add" && req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       const word = String(body.word || "").replace(/\s+/g, " ").trim();
       if (!word || word.length > 60) return json({ error: "bad word" }, 400);
       const id = word.toLowerCase();
-      const store = (await env.SYNC.get("deck", "json")) || {};
-      if (store[id] && !store[id].deleted) return json({ ok: true, exists: true, word });
+      const row = await env.DB.prepare("SELECT data FROM cards WHERE id=?").bind(id).first();
+      if (row && !JSON.parse(row.data).deleted) return json({ ok: true, exists: true, word });
       const r = await generate(env, word);
       if (r.error) return json({ error: r.error }, 502);
       const now = Date.now();
-      const fresh = (await env.SYNC.get("deck", "json")) || {};
-      fresh[id] = {
+      const card = {
         id, word, cat: "General", status: "ready", data: r.data,
-        due: now, interval: 0, reps: 0, createdAt: now, updatedAt: now, syncedAt: now,
+        due: now, interval: 0, reps: 0, createdAt: now, updatedAt: now,
       };
-      await env.SYNC.put("deck", JSON.stringify(fresh));
+      await env.DB.prepare(UPSERT).bind(id, JSON.stringify(card), now, now).run();
       return json({ ok: true, word, en: r.data.en, fa: r.data.fa });
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
       const { cards = [], since = 0 } = await req.json();
-      const store = (await env.SYNC.get("deck", "json")) || {};
       const now = Date.now();
-      for (const c of cards) {
-        const old = store[c.id];
-        if (!old || c.updatedAt > old.updatedAt) store[c.id] = { ...c, syncedAt: now };
+      try {
+        const valid = cards.filter((c) => c && c.id);
+        for (let i = 0; i < valid.length; i += 50) {
+          await env.DB.batch(
+            valid.slice(i, i + 50).map((c) =>
+              env.DB.prepare(UPSERT).bind(c.id, JSON.stringify(c), c.updatedAt || 0, now)
+            )
+          );
+        }
+        const { results } = await env.DB.prepare("SELECT data FROM cards WHERE synced_at > ?").bind(since).all();
+        return json({ cards: results.map((r) => JSON.parse(r.data)), now });
+      } catch (e) {
+        return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
       }
-      if (cards.length) await env.SYNC.put("deck", JSON.stringify(store));
-      const out = Object.values(store).filter((c) => c.syncedAt > since);
-      return json({ cards: out, now });
     }
 
     return json({ error: "not found" }, 404);
