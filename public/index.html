@@ -703,7 +703,7 @@ async function gen(list){
 }
 
 /* ---------- sync ---------- */
-let syncT,syncing=false,syncAgain=false,syncFail=0,syncCH=50;
+let syncT,syncing=false,syncAgain=false,syncFail=0,syncCH=Math.min(50,Math.max(10,+localStorage.syncCH||20));
 const scheduleSync=()=>{clearTimeout(syncT);syncT=setTimeout(sync,2500)};
 function syncState(t,on){$('#syncState').textContent=t;$('#dot').className='dot'+(on?' on':'')}
 async function sync(manual){
@@ -726,9 +726,9 @@ async function sync(manual){
    const cur=await getMany(j.cards.map(c=>c.id));
    const fresh=j.cards.filter((c,i)=>!cur[i]||c.updatedAt>cur[i].updatedAt);if(fresh.length){await putMany(fresh);changed=true}
    if(!j.more||!j.cursor)break;cursor=j.cursor}
-  localStorage.since=now;localStorage.lastPush=t0;syncFail=0;
+  localStorage.since=now;localStorage.lastPush=t0;syncFail=0;if(syncCH<50){syncCH=Math.min(50,syncCH+5);try{localStorage.syncCH=syncCH}catch{}}
   if(changed||manual===true)await refresh();syncState('Synced · '+new Date().toLocaleTimeString('en-US'),true);if(manual===true)toast('Synced')
- }catch(e){syncFail++;retry=true;if(e instanceof TypeError)syncCH=Math.max(10,syncCH>>1); // network drop: retry with smaller requests
+ }catch(e){syncFail++;retry=true;if(e instanceof TypeError){syncCH=Math.max(10,syncCH>>1);try{localStorage.syncCH=syncCH}catch{}} // network drop: retry with smaller requests
   syncState('Sync failed: '+String(e.message||e).slice(0,120)+' — retrying')}
  finally{syncing=false;
   if(retry)setTimeout(sync,Math.min(15000*syncFail,120000));else if(syncAgain){syncAgain=false;setTimeout(sync,500)}}}
