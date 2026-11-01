@@ -53,6 +53,12 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 .btn.sm.on,.btn.on{background:var(--acc);color:var(--onacc)}
 .danger{color:var(--again)}
 .show{width:100%;margin-top:14px;height:54px;font-size:17px}
+.studying nav{display:none}
+.studying main{padding-bottom:150px}
+#sdock{position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px,env(safe-area-inset-bottom));width:min(560px,calc(100% - 24px));z-index:6;display:none;padding:10px;background:var(--surf2);border-radius:28px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
+#sdock.on{display:block}
+#sdock .show,#sdock .rate{margin-top:0}
+.deck small{color:var(--mute);font-size:14px}
 .rate{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:14px}
 .rate button{border:0;background:var(--surf);border-radius:20px;padding:12px 2px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .rate small{display:block;font-weight:500;color:var(--mute);font-size:12px}
@@ -202,6 +208,7 @@ dialog.pop:focus-visible,.pop .act:focus,.pop .act:focus-visible{outline:0}
   <button role="tab" data-t="set" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>Settings</button>
 </nav>
 <div id="selbar"></div>
+<div id="sdock"></div>
 <dialog id="imp"><div id="impBody"></div></dialog>
 <dialog id="dlg"><div id="dlgBody"></div></dialog>
 <dialog id="sheet"><div id="sheetBody"></div></dialog>
@@ -332,9 +339,9 @@ const catLayout=n=>LAYS()[n]||null;
 function setCatLayout(n,v){const m=LAYS();if(v)m[n]=v;else delete m[n];localStorage.catLayout=JSON.stringify(m)}
 const fieldVal=(c,n)=>((c.fields||[]).find(x=>x.n===n)||{}).v||'';
 function layoutOf(c){const L=catLayout(catOf(c));if(!L||!c.fields||!c.fields.length)return null;
- const f=L.front||[],b=L.back||[];return c.rev?{front:b,back:f}:{front:f,back:b}}
+ const f=L.front||[],b=L.back||[],o=L.order||[];return c.rev?{front:b,back:f,order:o}:{front:f,back:b,order:o}}
 function fieldsHtml(c,L,all){
- const names=all?c.fields.map(x=>x.n):L.back,d=c.data||{};
+ const ord=(L.order||[]),names=all?c.fields.map(x=>x.n).sort((a,b)=>{const i=ord.indexOf(a),j=ord.indexOf(b);return (i<0?1e6:i)-(j<0?1e6:j)}):L.back,d=c.data||{};
  const say=[...L.front,...L.back].map(n=>fieldVal(c,n).split('\n')[0]).find(t=>t&&!ARA.test(t))||d.en||'';
  return (say?`<div class="row"><button class="btn sm" data-say="${esc(say)}" aria-label="Play pronunciation">🔊</button></div>`:'')
   +names.map(n=>{const v=fieldVal(c,n);return v?`<div class="fld"><small>${esc(n)}</small><div dir="auto">${esc(v)}</div></div>`:''}).join('')}
@@ -347,13 +354,20 @@ function backHtml(c,all){const L=layoutOf(c);if(L)return fieldsHtml(c,L,all);con
  <div class="big" dir="auto" style="font-size:22px">${esc(d.fa)}</div>
  ${(d.examples||[]).map(e=>`<div class="ex"><div class="en">${esc(e.en)}</div><div class="tr" dir="auto">${esc(e.fa)}</div></div>`).join('')}
  ${d.note?`<div class="note" dir="auto">${esc(d.note)}</div>`:''}`}
-function renderChips(){const l=cats();if(studyCat&&!l.includes(studyCat))setStudyCat('');
- const due=n=>cards.filter(c=>(!n||catOf(c)===n)&&isDue(c)).length;
- $('#chips').innerHTML=l.length>1?`<select id="studySel" aria-label="Category"><option value="">All categories · ${due('')}</option>${l.map(n=>`<option value="${esc(n)}"${n===studyCat?' selected':''}>${esc(n)} · ${due(n)}</option>`).join('')}</select>`:''}
-$('#chips').addEventListener('change',e=>{if(e.target.id!=='studySel')return;
- setStudyCat(e.target.value);cur=null;shown=false;renderChips();renderStudy()});
+let studyOpen=false;
+function renderChips(){const l=cats();$('#chips').innerHTML='';
+ if(studyCat&&!l.includes(studyCat)){setStudyCat('');if(studyOpen){studyOpen=false;cur=null;shown=false;recs=null;renderHeader()}}}
+function renderDecks(){const el=$('#sbody'),l=cats();
+ if(!cards.length){el.innerHTML='<div class="empty">No cards yet.<br>Add some words in the Add tab.</div>';return}
+ const row=(n,label)=>{const cs=cards.filter(c=>!n||catOf(c)===n),d=cs.filter(isDue).length;
+  return `<button class="srow deck" data-deck="${esc(n)}"><span dir="auto">${esc(label)}</span><small>${d?`<b style="color:var(--acc)">${d} due</b> · `:''}${cs.length}</small><i class="chev">›</i></button>`};
+ el.innerHTML=`<div class="sgrp">${(l.length>1?row('','All categories'):'')+l.map(n=>row(n,n)).join('')}</div>`}
+function openDeck(n){setStudyCat(n);studyOpen=true;cur=null;shown=false;recs=null;renderHeader();renderStudy();window.scrollTo(0,0)}
+function closeDeck(){studyOpen=false;cur=null;shown=false;recs=null;renderHeader();renderStudy();window.scrollTo(0,0)}
 function renderStudy(){
- const el=$('#sbody'),sel=cards.filter(inStudy),list=dueList();
+ const el=$('#sbody'),dock=$('#sdock');dock.className='';dock.innerHTML='';
+ if(!studyOpen){cur=null;renderDecks();return}
+ const sel=cards.filter(inStudy),list=dueList();
  if(!cards.length){el.innerHTML='<div class="empty">No cards yet.<br>Add some words in the Add tab.</div>';cur=null;return}
  if(!sel.length){el.innerHTML='<div class="empty">No cards in this category.</div>';cur=null;return}
  if(!list.length){const next=sel.filter(c=>c.status==='ready').sort((a,b)=>a.due-b.due)[0];
@@ -363,9 +377,10 @@ function renderStudy(){
  const c=cur;
  if(shown&&(!recs||recs.id!==c.id)){const now=new Date();recs={id:c.id,now:+now,r:fsRepeat(fsLoad(c,now),now)}}
  el.innerHTML=`<div class="top"><span>${list.length} due</span><span>${sel.length} total</span></div>
- <div class="card">${shown?backHtml(c)+`<div class="row" style="margin-top:14px"><button class="btn sm" id="exBtn">✨ Add 2 conversational examples</button></div>`:`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>
- ${shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(+recs.r[i+1].due-recs.now)}</small></button>`).join('')}<button class="s" data-r="skip">Skip<small>7 y</small></button></div>`
- :'<button class="btn pri show" id="showBtn">Show answer</button>'}`}
+ <div class="card">${shown?backHtml(c)+`<div class="row" style="margin-top:14px"><button class="btn sm" id="exBtn">✨ Add 2 conversational examples</button></div>`:`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>`;
+ dock.innerHTML=shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(+recs.r[i+1].due-recs.now)}</small></button>`).join('')}<button class="s" data-r="skip">Skip<small>7 y</small></button></div>`
+ :'<button class="btn pri show" id="showBtn">Show answer</button>';
+ dock.className='on'}
 let exBusy=false;
 async function addExamples(c){if(!c||!c.data||exBusy)return;
  if(!KEY())return toast('Enter the access key in Settings first');if(!navigator.onLine)return toast('You are offline');
@@ -397,11 +412,13 @@ function openSkipped(){const l=skippedList();
   +(l.length?l.map(c=>`<div class="it"><div class="bd"><div class="tx"><b dir="auto">${esc(c.word)}</b><small>returns ${new Date(c.due).toLocaleDateString('en-US')}</small></div><button class="btn sm" data-unskip="${esc(c.id)}">Return</button></div></div>`).join('')
    +`<div class="row" style="margin-top:14px"><button class="btn" data-unskipall>Return all (${l.length})</button></div>`:'<div class="empty">No skipped cards.</div>');
  if(!$('#dlg').open)$('#dlg').showModal()}
-$('#sbody').addEventListener('click',e=>{
+const studyClick=e=>{
+ const dk=e.target.closest('[data-deck]');if(dk)return openDeck(dk.dataset.deck);
  const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
  const r=e.target.closest('[data-r]');if(r)return rate(r.dataset.r);
  if(e.target.id==='showBtn'){shown=true;recs=null;renderStudy();autoSay()}
- if(e.target.id==='exBtn')addExamples(cur)});
+ if(e.target.id==='exBtn')addExamples(cur)};
+$('#sbody').addEventListener('click',studyClick);$('#sdock').addEventListener('click',studyClick);
 document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,select'))return;
  if($('#study').hidden||$('#dlg').open||$('#sheet').open)return;
  if(e.key===' '&&cur&&!shown){e.preventDefault();shown=true;recs=null;renderStudy();autoSay()}
@@ -413,8 +430,9 @@ const SPN={sync:'Sync',look:'Appearance',iv:'Review (FSRS)',voice:'Pronunciation
 function openSp(k){spOpen=k||null;$('#setHome').hidden=!!spOpen;document.querySelectorAll('.spg').forEach(g=>g.hidden=g.id!=='sp_'+spOpen);renderHeader();toTop()}
 $('#setHome').addEventListener('click',e=>{const b=e.target.closest('[data-sp]');if(b)openSp(b.dataset.sp)});
 function renderHeader(){
- $('#title').textContent={study:'Study',add:'Add',cards:openCat||'Cards',set:spOpen?SPN[spOpen]:'Settings'}[tab];
- $('#back').style.visibility=((tab==='cards'&&openCat)||(tab==='set'&&spOpen))?'visible':'hidden'}
+ $('#title').textContent={study:studyOpen?(studyCat||'All categories'):'Study',add:'Add',cards:openCat||'Cards',set:spOpen?SPN[spOpen]:'Settings'}[tab];
+ $('#back').style.visibility=((tab==='study'&&studyOpen)||(tab==='cards'&&openCat)||(tab==='set'&&spOpen))?'visible':'hidden';
+ document.body.classList.toggle('studying',tab==='study'&&studyOpen)}
 let selMode=false,sel=new Set();
 function visible(){const q=$('#q').value.trim().toLowerCase();
  const ok=c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q);
@@ -478,25 +496,36 @@ function openSort(){const o=catSort(openCat);
  $('#sk').value=o.k;$('#sd').value=o.d;if(!$('#dlg').open)$('#dlg').showModal()}
 function openLayout(){
  const cs=cards.filter(c=>catOf(c)===openCat&&c.fields&&c.fields.length);
- const names=[];cs.forEach(c=>c.fields.forEach(x=>{if(!names.includes(x.n))names.push(x.n)}));
+ let names=[];cs.forEach(c=>c.fields.forEach(x=>{if(!names.includes(x.n))names.push(x.n)}));
  if(!names.length)return toast('This category has no imported fields');
  const L=catLayout(openCat)||{front:[names[0]],back:names.slice(1)};
+ if(L.order&&L.order.length){const o=L.order;names=[...o.filter(n=>names.includes(n)),...names.filter(n=>!o.includes(n))]}
+ const F=new Set(L.front||[]),B=new Set(L.back||[]);
  const sample=n=>{const c=cs.find(c=>fieldVal(c,n));return c?fieldVal(c,n).replace(/\s+/g,' ').slice(0,40):''};
- $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Front / back fields</b><button class="x" data-close aria-label="Close">✕</button></div>
- <p class="pron" style="font-size:13px">Choose which fields of "${esc(openCat)}" appear on the front and on the back of the card. Applies to this category's cards.</p>
- ${names.map((n,i)=>`<div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--surf2)">
+ const arr=(i,d)=>{const off=(d<0&&i===0)||(d>0&&i===names.length-1);return `<button class="x" data-mv="${i}" data-d="${d}" aria-label="${d<0?'Move up':'Move down'}" style="font-size:16px;padding:4px 8px${off?';opacity:.25':''}"${off?' disabled':''}>${d<0?'▲':'▼'}</button>`};
+ const rows=()=>names.map((n,i)=>`<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--surf2)">
+  <div style="display:flex;flex-direction:column">${arr(i,-1)}${arr(i,1)}</div>
   <div style="min-width:0"><b dir="auto">${esc(n)}</b><div class="pron" dir="auto" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sample(n))}</div></div>
-  <label style="font-size:13px"><input type="checkbox" data-f="${i}"${L.front.includes(n)?' checked':''}> Front</label>
-  <label style="font-size:13px"><input type="checkbox" data-b="${i}"${L.back.includes(n)?' checked':''}> Back</label></div>`).join('')}
- <div class="card" style="min-height:0;margin-top:14px;padding:14px"><small class="pron">Preview</small><div id="lyPrev" style="margin-top:6px"></div></div>
- <div class="row" style="margin-top:18px"><button class="btn pri" id="lySave">Save</button><button class="btn" id="lyDef">Default</button><button class="btn" id="lyNo">Cancel</button></div>`;
- const pick=a=>names.filter((n,i)=>$('#dlgBody').querySelector(`[data-${a}="${i}"]`).checked);
+  <label style="font-size:13px"><input type="checkbox" data-f="${i}"${F.has(n)?' checked':''}> Front</label>
+  <label style="font-size:13px"><input type="checkbox" data-b="${i}"${B.has(n)?' checked':''}> Back</label></div>`).join('');
+ $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Front / back fields</b><button class="x" data-close aria-label="Close">✕</button></div>
+ <div class="row" style="margin:6px 0 10px"><button class="btn pri" id="lySave">Save</button><button class="btn" id="lyDef">Default</button><button class="btn" id="lyNo">Cancel</button></div>
+ <p class="pron" style="font-size:13px">Choose which fields of "${esc(openCat)}" appear on the front and on the back, and use ▲ ▼ to change their order. Applies to this category's cards.</p>
+ <div id="lyRows">${rows()}</div>
+ <div class="card" style="min-height:0;margin-top:14px;padding:14px"><small class="pron">Preview</small><div id="lyPrev" style="margin-top:6px"></div></div>`;
+ const pick=a=>names.filter(n=>(a==='f'?F:B).has(n));
  const prev=()=>{const c=cs[0],f=pick('f'),b=pick('b'),t=l=>l.map(n=>fieldVal(c,n)).filter(Boolean).join('\n');
   $('#lyPrev').innerHTML=`<div class="fld"><small>Front</small><div dir="auto">${esc(t(f))||'—'}</div></div><div class="fld"><small>Back</small><div dir="auto">${esc(t(b))||'—'}</div></div>`};
- $('#dlgBody').querySelectorAll('input[type=checkbox]').forEach(x=>x.onchange=prev);prev();
+ const box=$('#lyRows');
+ box.addEventListener('change',e=>{const t=e.target,a=t.dataset.f!==undefined?'f':t.dataset.b!==undefined?'b':null;if(!a)return;
+  const n=names[+t.dataset[a]],S=a==='f'?F:B;t.checked?S.add(n):S.delete(n);prev()});
+ box.addEventListener('click',e=>{const m=e.target.closest('[data-mv]');if(!m||m.disabled)return;
+  const i=+m.dataset.mv,j=i+(+m.dataset.d);if(j<0||j>=names.length)return;
+  [names[i],names[j]]=[names[j],names[i]];box.innerHTML=rows();prev()});
+ prev();
  const apply=()=>{cur=null;shown=false;render()};
  $('#lySave').onclick=()=>{const f=pick('f'),b=pick('b');if(!f.length)return toast('Pick at least one field for the front');
-  setCatLayout(openCat,{front:f,back:b});$('#dlg').close();apply();toast('Layout saved')};
+  setCatLayout(openCat,{front:f,back:b,order:[...names]});$('#dlg').close();apply();toast('Layout saved')};
  $('#lyDef').onclick=()=>{setCatLayout(openCat,null);$('#dlg').close();apply();toast('Back to the default layout')};
  $('#lyNo').onclick=()=>$('#dlg').close();
  if(!$('#dlg').open)$('#dlg').showModal()}
@@ -539,7 +568,7 @@ $('#selbar').addEventListener('click',async e=>{const t=e.target.closest('button
   showSheet([...cats().map(n=>[n,()=>mv(n),0,'folder']),['New category…',()=>{const n=(prompt('New category name')||'').trim();if(n)mv(n)},0,'plus']],'Move to')}});
 
 /* ---------- header actions ---------- */
-$('#back').onclick=()=>{if(tab==='set'&&spOpen){openSp(null);return}if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
+$('#back').onclick=()=>{if(tab==='study'&&studyOpen){closeDeck();return}if(tab==='set'&&spOpen){openSp(null);return}if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
 function showSheet(a,title,pop){const d=$('#sheet');d.classList.toggle('pop',!!pop);
  if(pop){const r=$('#more').getBoundingClientRect();d.style.setProperty('--pt',Math.round(r.top)+'px')}
  $('#sheetBody').innerHTML=(title?`<b class="big" style="display:block;margin-bottom:6px">${esc(title)}</b>`:'')+a.map((x,i)=>`<button class="act ${x[2]?'danger':''} ${x[4]?'sep':''}" data-i="${i}">${x[3]?ico(x[3]):''}<span>${esc(x[0])}</span></button>`).join('');
@@ -797,7 +826,7 @@ function goRoot(){ // tapping the tab you are already on -> back to its first sc
  if($('#sheet').open)$('#sheet').close();if($('#dlg').open)$('#dlg').close();
  if(tab==='cards'){openCat=null;$('#q').value='';selMode=false;sel.clear();renderList()}
  if(tab==='set'&&spOpen){openSp(null);return}
- if(tab==='study'&&shown){shown=false;recs=null;renderStudy()}
+ if(tab==='study'&&studyOpen){closeDeck();return}
  toTop()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{b.dataset.t===tab?goRoot():go(b.dataset.t)});
 /* swipe from the left edge to the right = Back (like iPhone) */
@@ -809,6 +838,7 @@ function goBack(){
  if(tab==='set'&&spOpen){openSp(null);return}
  if(tab==='cards'&&openCat){openCat=null;sel.clear();renderList();return}
  if(tab==='cards'&&$('#q').value){$('#q').value='';renderList();return}
+ if(tab==='study'&&studyOpen){closeDeck();return}
  if(tab!=='study')go('study')}
 let sx=0,sy=0,st=0,sOk=false;
 document.addEventListener('touchstart',e=>{const t=e.touches[0];sx=t.clientX;sy=t.clientY;st=Date.now();sOk=e.touches.length===1&&sx<=48},{passive:true});
