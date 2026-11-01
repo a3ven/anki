@@ -541,11 +541,11 @@ function openSort(){const o=catSort(openCat);
  <label for="sd">Direction</label><select id="sd"><option value="asc">Ascending</option><option value="desc">Descending</option></select>
  <p class="pron" style="font-size:13px;margin-top:14px">Applies to this category's list and to the order new cards are introduced in Study.</p>`;
  $('#sk').value=o.k;$('#sd').value=o.d;if(!$('#dlg').open)$('#dlg').showModal()}
-function openLayout(){
- const cs=cards.filter(c=>inCat(c,openCat)&&c.fields&&c.fields.length);
+function openLayout(cat){const CT=cat||openCat;
+ const cs=cards.filter(c=>inCat(c,CT)&&c.fields&&c.fields.length);
  let names=[];cs.forEach(c=>c.fields.forEach(x=>{if(!names.includes(x.n))names.push(x.n)}));
  if(!names.length)return toast('This category has no imported fields');
- const L=catLayout(openCat)||{front:[names[0]],back:names.slice(1)};
+ const L=catLayout(CT)||{front:[names[0]],back:names.slice(1)};
  if(L.order&&L.order.length){const o=L.order;names=[...o.filter(n=>names.includes(n)),...names.filter(n=>!o.includes(n))]}
  const F=new Set(L.front||[]),B=new Set(L.back||[]);
  const sample=n=>{const c=cs.find(c=>fieldVal(c,n));return c?fieldVal(c,n).replace(/\s+/g,' ').slice(0,40):''};
@@ -557,7 +557,7 @@ function openLayout(){
   <label style="font-size:13px"><input type="checkbox" data-b="${i}"${B.has(n)?' checked':''}> Back</label></div>`).join('');
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Front / back fields</b><button class="x" data-close aria-label="Close">✕</button></div>
  <div class="row" style="margin:6px 0 10px"><button class="btn pri" id="lySave">Save</button><button class="btn" id="lyDef">Default</button><button class="btn" id="lyNo">Cancel</button></div>
- <p class="pron" style="font-size:13px">Choose which fields of "${esc(openCat)}" appear on the front and on the back, and use ▲ ▼ to change their order. Applies to this category's cards.</p>
+ <p class="pron" style="font-size:13px">Choose which fields of "${esc(CT)}" appear on the front and on the back, and use ▲ ▼ to change their order. Applies to this category's cards.</p>
  <div id="lyRows">${rows()}</div>
  <div class="card" style="min-height:0;margin-top:14px;padding:14px"><small class="pron">Preview</small><div id="lyPrev" style="margin-top:6px"></div></div>`;
  const pick=a=>names.filter(n=>(a==='f'?F:B).has(n));
@@ -572,11 +572,11 @@ function openLayout(){
  prev();
  const apply=()=>{cur=null;shown=false;render()};
  $('#lySave').onclick=()=>{const f=pick('f'),b=pick('b');if(!f.length)return toast('Pick at least one field for the front');
-  setCatLayout(openCat,{front:f,back:b,order:[...names]});$('#dlg').close();apply();toast('Layout saved')};
- $('#lyDef').onclick=()=>{setCatLayout(openCat,null);$('#dlg').close();apply();toast('Back to the default layout')};
+  setCatLayout(CT,{front:f,back:b,order:[...names]});$('#dlg').close();apply();toast('Layout saved')};
+ $('#lyDef').onclick=()=>{setCatLayout(CT,null);$('#dlg').close();apply();toast('Back to the default layout')};
  $('#lyNo').onclick=()=>$('#dlg').close();
  if(!$('#dlg').open)$('#dlg').showModal()}
-async function reverseCat(){const t=cards.filter(c=>inCat(c,openCat)&&c.status==='ready');if(!t.length)return toast('No ready cards in this category');
+async function reverseCat(inScope){const t=cards.filter(c=>(inScope||(x=>inCat(x,openCat)))(c)&&c.status==='ready');if(!t.length)return toast('No ready cards in this category');
  const v=!t.every(c=>c.rev),now=Date.now();t.forEach(c=>{c.rev=v;c.updatedAt=now});
  await putMany(t);cur=null;shown=false;await refresh();scheduleSync();toast(v?`${t.length} card${t.length>1?'s':''} reversed`:'Back to normal order')}
 async function deleteCat(){const n=openCat;if(n===FAVN)return;const t=cards.filter(c=>catOf(c)===n);
@@ -635,6 +635,10 @@ $('#more').onclick=()=>{const a=[];
    [c.unote?'Edit note':'Add note',()=>editNote(c),0,'note']);
   if(c.data)a.push(['Add 2 examples with AI',()=>addExamples(c),0,'gen']);
   a.push([c.fav?'Remove from favorites':'Add to favorites',()=>toggleFav(c),0,'star'])}
+ if(tab==='study'&&studyOpen){
+  if(studyCat&&cards.some(c=>inCat(c,studyCat)&&c.fields&&c.fields.length))a.push(['Front / back fields',()=>openLayout(studyCat),0,'layout']);
+  const rt=cards.filter(c=>inStudy(c)&&c.status==='ready');
+  if(rt.length)a.push([rt.every(c=>c.rev)?'Restore normal order':'Reverse all cards',()=>reverseCat(inStudy),0,'flip'])}
  if(tab==='cards'&&openCat){const pinI=[isPinned(openCat)?'Unpin category':'Pin category',()=>togglePin(openCat),0,'pin'],expI=['Export to Excel',()=>exportCat(openCat),0,'export'];
   a.push(...(openCat===FAVN?[pinI,expI,['Reset review',resetCat,0,'reset'],['Reverse all cards',reverseCat,0,'flip']]:[pinI,['Rename category',renameCat,0,'rename'],expI,['Reset review',resetCat,0,'reset'],['Reverse all cards',reverseCat,0,'flip'],['Delete all cards',deleteCat,1,'del']]))}
  if(tab==='cards'&&!openCat&&cards.length)a.push(['Reorder & pin',()=>{catEdit=true;renderList()},0,'sort'],['Export all to Excel',exportAll,0,'export']);
@@ -773,11 +777,22 @@ function askCat(n,def){return new Promise(res=>{const d=$('#imp');
  $('#impNo').onclick=()=>done(null);
  d.onclose=()=>res(null);d.showModal()})}
 async function importFile(f){
- try{toast('Reading file…',8000);const ext=f.name.split('.').pop().toLowerCase();let ws=[];
+ try{toast('Reading file…',8000);const ext=f.name.split('.').pop().toLowerCase();let ws=[],lay=null;
   if(['xlsx','xls','csv'].includes(ext)){await load(LIB.xlsx);
-   const wb=XLSX.read(await f.arrayBuffer());
-   ws=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}).map(r=>r[0]).filter(v=>v!=null&&v!=='').map(String);
-   if(/^(word|words|front|کلمه|واژه)$/i.test((ws[0]||'').trim()))ws.shift()}
+   const wb=ext==='csv'?XLSX.read(await f.text(),{type:'string'}):XLSX.read(await f.arrayBuffer());
+   const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''})
+    .map(r=>r.map(v=>String(v==null?'':v).trim())).filter(r=>r.some(v=>v));
+   const hd=rows[0]||[];
+   if(hd.filter(Boolean).length>=2){
+    /* several columns: the first row names the fields (Front, Meaning, ...) */
+    const used=new Set(),nm=hd.map((h,i)=>{let n=h||('Field '+(i+1)),k=n,j=2;while(used.has(k.toLowerCase()))k=n+' '+j++;used.add(k.toLowerCase());return k});
+    let wi=nm.findIndex(n=>/^(front|word|words|term|question|کلمه|واژه|لغت|سوال|پرسش)$/i.test(n));if(wi<0)wi=0;
+    const ord=[wi,...nm.map((_,i)=>i).filter(i=>i!==wi&&i<nm.length)],names=ord.map(i=>nm[i]);
+    ws=rows.slice(1).map(r=>noteToCard(ord.map(i=>r[i]||''),names)).filter(Boolean);
+    lay={front:[names[0]],back:names.slice(1),order:[...names]}}
+   else{
+    ws=rows.map(r=>r[0]).filter(Boolean);
+    if(/^(word|words|front|کلمه|واژه)$/i.test((ws[0]||'').trim()))ws.shift()}}
   else if(ext==='apkg'){await load(LIB.zip);await load(LIB.sql);
    const z=await JSZip.loadAsync(f);const ent=z.file('collection.anki21')||z.file('collection.anki2');
    if(!ent||(z.file('collection.anki21b')&&!z.file('collection.anki21')))
@@ -791,6 +806,7 @@ async function importFile(f){
   if(!ws.length)throw new Error('No words found in the file');
   $('#msg').style.display='none';
   const cat=await askCat(ws.length,f.name.replace(/\.[^.]+$/,''));if(!cat)return;
+  if(lay&&!catLayout(cat))setCatLayout(cat,lay);
   await addWords(ws,cat)}catch(err){toast(err.message,6000)}}
 $('#file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)importFile(f)};
 $('#pickFile').onclick=()=>$('#file').click();
