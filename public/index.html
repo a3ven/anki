@@ -702,7 +702,7 @@ async function gen(list){
 }
 
 /* ---------- sync ---------- */
-let syncT,syncing=false,syncAgain=false,syncFail=0;
+let syncT,syncing=false,syncAgain=false,syncFail=0,syncCH=100;
 const scheduleSync=()=>{clearTimeout(syncT);syncT=setTimeout(sync,2500)};
 function syncState(t,on){$('#syncState').textContent=t;$('#dot').className='dot'+(on?' on':'')}
 async function sync(manual){
@@ -711,7 +711,7 @@ async function sync(manual){
  if(!navigator.onLine){syncState('Offline — will sync when back online');if(manual===true)toast('You are offline');return}
  syncing=true;let retry=false;
  try{const OV=600000,full=manual===true,since=full?0:Math.max(0,(+localStorage.since||0)-OV),lastPush=full?0:Math.max(0,(+localStorage.lastPush||0)-OV),t0=Date.now();
-  const all=await getAll(),push=all.filter(c=>c.updatedAt>lastPush),CH=200;let j=null;
+  const all=await getAll(),push=all.filter(c=>c.updatedAt>lastPush),CH=syncCH;let j=null;
   // push in chunks (a big import in one request can hit Worker/D1 limits); only the last request pulls
   for(let i=0;;i+=CH){const last=i+CH>=push.length;
    const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},
@@ -723,7 +723,8 @@ async function sync(manual){
   const fresh=j.cards.filter(c=>!local.has(c.id)||c.updatedAt>local.get(c.id).updatedAt);await putMany(fresh);
   localStorage.since=j.now;localStorage.lastPush=t0;syncFail=0;
   if(fresh.length||manual===true)await refresh();syncState('Synced · '+new Date().toLocaleTimeString('en-US'),true);if(manual===true)toast('Synced')
- }catch(e){syncFail++;retry=true;syncState('Sync failed: '+String(e.message||e).slice(0,120)+' — retrying')}
+ }catch(e){syncFail++;retry=true;if(e instanceof TypeError)syncCH=Math.max(10,syncCH>>1); // network drop: retry with smaller requests
+  syncState('Sync failed: '+String(e.message||e).slice(0,120)+' — retrying')}
  finally{syncing=false;
   if(retry)setTimeout(sync,Math.min(15000*syncFail,120000));else if(syncAgain){syncAgain=false;setTimeout(sync,500)}}}
 $('#saveKey').onclick=()=>{localStorage.appKey=$('#key').value.trim();localStorage.since=0;localStorage.lastPush=0;sync(true)};
