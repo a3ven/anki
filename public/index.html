@@ -332,9 +332,9 @@ const catLayout=n=>LAYS()[n]||null;
 function setCatLayout(n,v){const m=LAYS();if(v)m[n]=v;else delete m[n];localStorage.catLayout=JSON.stringify(m)}
 const fieldVal=(c,n)=>((c.fields||[]).find(x=>x.n===n)||{}).v||'';
 function layoutOf(c){const L=catLayout(catOf(c));if(!L||!c.fields||!c.fields.length)return null;
- const f=L.front||[],b=L.back||[];return c.rev?{front:b,back:f}:{front:f,back:b}}
+ const f=L.front||[],b=L.back||[],o=L.order||[];return c.rev?{front:b,back:f,order:o}:{front:f,back:b,order:o}}
 function fieldsHtml(c,L,all){
- const names=all?c.fields.map(x=>x.n):L.back,d=c.data||{};
+ const ord=(L.order||[]),names=all?c.fields.map(x=>x.n).sort((a,b)=>{const i=ord.indexOf(a),j=ord.indexOf(b);return (i<0?1e6:i)-(j<0?1e6:j)}):L.back,d=c.data||{};
  const say=[...L.front,...L.back].map(n=>fieldVal(c,n).split('\n')[0]).find(t=>t&&!ARA.test(t))||d.en||'';
  return (say?`<div class="row"><button class="btn sm" data-say="${esc(say)}" aria-label="Play pronunciation">🔊</button></div>`:'')
   +names.map(n=>{const v=fieldVal(c,n);return v?`<div class="fld"><small>${esc(n)}</small><div dir="auto">${esc(v)}</div></div>`:''}).join('')}
@@ -478,25 +478,36 @@ function openSort(){const o=catSort(openCat);
  $('#sk').value=o.k;$('#sd').value=o.d;if(!$('#dlg').open)$('#dlg').showModal()}
 function openLayout(){
  const cs=cards.filter(c=>catOf(c)===openCat&&c.fields&&c.fields.length);
- const names=[];cs.forEach(c=>c.fields.forEach(x=>{if(!names.includes(x.n))names.push(x.n)}));
+ let names=[];cs.forEach(c=>c.fields.forEach(x=>{if(!names.includes(x.n))names.push(x.n)}));
  if(!names.length)return toast('This category has no imported fields');
  const L=catLayout(openCat)||{front:[names[0]],back:names.slice(1)};
+ if(L.order&&L.order.length){const o=L.order;names=[...o.filter(n=>names.includes(n)),...names.filter(n=>!o.includes(n))]}
+ const F=new Set(L.front||[]),B=new Set(L.back||[]);
  const sample=n=>{const c=cs.find(c=>fieldVal(c,n));return c?fieldVal(c,n).replace(/\s+/g,' ').slice(0,40):''};
- $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Front / back fields</b><button class="x" data-close aria-label="Close">✕</button></div>
- <p class="pron" style="font-size:13px">Choose which fields of "${esc(openCat)}" appear on the front and on the back of the card. Applies to this category's cards.</p>
- ${names.map((n,i)=>`<div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--surf2)">
+ const arr=(i,d)=>{const off=(d<0&&i===0)||(d>0&&i===names.length-1);return `<button class="x" data-mv="${i}" data-d="${d}" aria-label="${d<0?'Move up':'Move down'}" style="font-size:16px;padding:4px 8px${off?';opacity:.25':''}"${off?' disabled':''}>${d<0?'▲':'▼'}</button>`};
+ const rows=()=>names.map((n,i)=>`<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--surf2)">
+  <div style="display:flex;flex-direction:column">${arr(i,-1)}${arr(i,1)}</div>
   <div style="min-width:0"><b dir="auto">${esc(n)}</b><div class="pron" dir="auto" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sample(n))}</div></div>
-  <label style="font-size:13px"><input type="checkbox" data-f="${i}"${L.front.includes(n)?' checked':''}> Front</label>
-  <label style="font-size:13px"><input type="checkbox" data-b="${i}"${L.back.includes(n)?' checked':''}> Back</label></div>`).join('')}
+  <label style="font-size:13px"><input type="checkbox" data-f="${i}"${F.has(n)?' checked':''}> Front</label>
+  <label style="font-size:13px"><input type="checkbox" data-b="${i}"${B.has(n)?' checked':''}> Back</label></div>`).join('');
+ $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Front / back fields</b><button class="x" data-close aria-label="Close">✕</button></div>
+ <p class="pron" style="font-size:13px">Choose which fields of "${esc(openCat)}" appear on the front and on the back, and use ▲ ▼ to change their order. Applies to this category's cards.</p>
+ <div id="lyRows">${rows()}</div>
  <div class="card" style="min-height:0;margin-top:14px;padding:14px"><small class="pron">Preview</small><div id="lyPrev" style="margin-top:6px"></div></div>
  <div class="row" style="margin-top:18px"><button class="btn pri" id="lySave">Save</button><button class="btn" id="lyDef">Default</button><button class="btn" id="lyNo">Cancel</button></div>`;
- const pick=a=>names.filter((n,i)=>$('#dlgBody').querySelector(`[data-${a}="${i}"]`).checked);
+ const pick=a=>names.filter(n=>(a==='f'?F:B).has(n));
  const prev=()=>{const c=cs[0],f=pick('f'),b=pick('b'),t=l=>l.map(n=>fieldVal(c,n)).filter(Boolean).join('\n');
   $('#lyPrev').innerHTML=`<div class="fld"><small>Front</small><div dir="auto">${esc(t(f))||'—'}</div></div><div class="fld"><small>Back</small><div dir="auto">${esc(t(b))||'—'}</div></div>`};
- $('#dlgBody').querySelectorAll('input[type=checkbox]').forEach(x=>x.onchange=prev);prev();
+ const box=$('#lyRows');
+ box.addEventListener('change',e=>{const t=e.target,a=t.dataset.f!==undefined?'f':t.dataset.b!==undefined?'b':null;if(!a)return;
+  const n=names[+t.dataset[a]],S=a==='f'?F:B;t.checked?S.add(n):S.delete(n);prev()});
+ box.addEventListener('click',e=>{const m=e.target.closest('[data-mv]');if(!m||m.disabled)return;
+  const i=+m.dataset.mv,j=i+(+m.dataset.d);if(j<0||j>=names.length)return;
+  [names[i],names[j]]=[names[j],names[i]];box.innerHTML=rows();prev()});
+ prev();
  const apply=()=>{cur=null;shown=false;render()};
  $('#lySave').onclick=()=>{const f=pick('f'),b=pick('b');if(!f.length)return toast('Pick at least one field for the front');
-  setCatLayout(openCat,{front:f,back:b});$('#dlg').close();apply();toast('Layout saved')};
+  setCatLayout(openCat,{front:f,back:b,order:[...names]});$('#dlg').close();apply();toast('Layout saved')};
  $('#lyDef').onclick=()=>{setCatLayout(openCat,null);$('#dlg').close();apply();toast('Back to the default layout')};
  $('#lyNo').onclick=()=>$('#dlg').close();
  if(!$('#dlg').open)$('#dlg').showModal()}
