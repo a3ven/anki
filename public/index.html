@@ -702,28 +702,36 @@ async function gen(list){
 }
 
 /* ---------- sync ---------- */
-let syncT,syncing=false;
+let syncT,syncing=false,syncAgain=false,syncFail=0;
 const scheduleSync=()=>{clearTimeout(syncT);syncT=setTimeout(sync,2500)};
 function syncState(t,on){$('#syncState').textContent=t;$('#dot').className='dot'+(on?' on':'')}
 async function sync(manual){
- if(syncing)return;if(!KEY()){if(manual===true)toast('Enter the access key in Settings');return}
+ if(syncing){syncAgain=true;return} // a change made during a running sync is pushed right after it
+ if(!KEY()){if(manual===true)toast('Enter the access key in Settings');return}
  if(!navigator.onLine){syncState('Offline — will sync when back online');if(manual===true)toast('You are offline');return}
- syncing=true;
+ syncing=true;let retry=false;
  try{const OV=600000,full=manual===true,since=full?0:Math.max(0,(+localStorage.since||0)-OV),lastPush=full?0:Math.max(0,(+localStorage.lastPush||0)-OV),t0=Date.now();
-  const all=await getAll();
-  const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},
-   body:JSON.stringify({cards:all.filter(c=>c.updatedAt>lastPush),since})});
-  if(r.status===401){syncState('Wrong access key');return}
-  if(!r.ok){let t='';try{t=(await r.json()).error||''}catch{}throw new Error('HTTP '+r.status+' '+t)}
-  const j=await r.json();const local=new Map(all.map(c=>[c.id,c]));
-  await putMany(j.cards.filter(c=>!local.has(c.id)||c.updatedAt>local.get(c.id).updatedAt));
-  localStorage.since=j.now;localStorage.lastPush=t0;
-  await refresh();syncState('Synced · '+new Date().toLocaleTimeString('en-US'),true);if(manual===true)toast('Synced')
- }catch(e){syncState('Sync failed: '+String(e.message||e).slice(0,120))}finally{syncing=false}}
+  const all=await getAll(),push=all.filter(c=>c.updatedAt>lastPush),CH=200;let j=null;
+  // push in chunks (a big import in one request can hit Worker/D1 limits); only the last request pulls
+  for(let i=0;;i+=CH){const last=i+CH>=push.length;
+   const r=await fetch('/api/sync',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},
+    body:JSON.stringify({cards:push.slice(i,i+CH),since:last?since:9e15})});
+   if(r.status===401){syncState('Wrong access key');return}
+   if(!r.ok){let t='';try{t=(await r.json()).error||''}catch{}throw new Error('HTTP '+r.status+' '+t)}
+   const jj=await r.json();if(last){j=jj;break}}
+  const local=new Map((await getAll()).map(c=>[c.id,c])); // current DB, not the snapshot from before the request
+  const fresh=j.cards.filter(c=>!local.has(c.id)||c.updatedAt>local.get(c.id).updatedAt);await putMany(fresh);
+  localStorage.since=j.now;localStorage.lastPush=t0;syncFail=0;
+  if(fresh.length||manual===true)await refresh();syncState('Synced · '+new Date().toLocaleTimeString('en-US'),true);if(manual===true)toast('Synced')
+ }catch(e){syncFail++;retry=true;syncState('Sync failed: '+String(e.message||e).slice(0,120)+' — retrying')}
+ finally{syncing=false;
+  if(retry)setTimeout(sync,Math.min(15000*syncFail,120000));else if(syncAgain){syncAgain=false;setTimeout(sync,500)}}}
 $('#saveKey').onclick=()=>{localStorage.appKey=$('#key').value.trim();localStorage.since=0;localStorage.lastPush=0;sync(true)};
 $('#syncNow').onclick=()=>sync(true);
 addEventListener('online',()=>{sync()});
+addEventListener('focus',()=>{sync()});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
+setInterval(()=>{if(!document.hidden&&KEY())sync()},60000); // desktop tabs stay open: pull other devices' changes regularly
 
 /* ---------- theme / speed / tabs / boot ---------- */
 function setTheme(t){localStorage.theme=t;document.documentElement.dataset.theme=t;
