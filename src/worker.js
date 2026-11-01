@@ -130,6 +130,7 @@ async function initDb(env) {
   await env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS cards (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL, synced_at INTEGER NOT NULL)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cards_synced ON cards (synced_at)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cards_synced_id ON cards (synced_at, id)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)"),
   ]);
   // one-time import of the old KV deck (if the KV binding still exists)
@@ -213,23 +214,24 @@ export default {
             )
           );
         }
-        // Pulling is paged (limit + cursor) so one response never gets huge and cut off by the network.
+        // Pulling is paged (limit + cursor) so one response never gets huge and cut off.
+        // Rows already hold JSON text, so the response is assembled as a string (cheap on CPU).
         // Old clients send no limit and still get everything in one response.
         const lim = Math.min(Math.max(parseInt(limit) || 0, 0), 500);
+        const out = (body) => new Response(body, { headers: { "content-type": "application/json" } });
         if (!lim) {
           const { results } = await env.DB.prepare("SELECT data FROM cards WHERE synced_at > ?").bind(since).all();
-          return json({ cards: results.map((r) => JSON.parse(r.data)), now });
+          return out(`{"cards":[${results.map((r) => r.data).join(",")}],"now":${now}}`);
         }
         const { results } = await env.DB.prepare(
-          "SELECT id, data, synced_at FROM cards WHERE synced_at > ? OR (synced_at = ? AND id > ?) ORDER BY synced_at, id LIMIT ?"
-        ).bind(since, since, String(after), lim).all();
+          "SELECT id, data, synced_at FROM cards WHERE (synced_at, id) > (?, ?) ORDER BY synced_at, id LIMIT ?"
+        ).bind(since, String(after), lim).all();
         const last = results[results.length - 1];
-        return json({
-          cards: results.map((r) => JSON.parse(r.data)),
-          now,
-          more: results.length === lim,
-          cursor: last ? { t: last.synced_at, id: last.id } : null,
-        });
+        return out(
+          `{"cards":[${results.map((r) => r.data).join(",")}],"now":${now},"more":${results.length === lim},"cursor":${
+            last ? JSON.stringify({ t: last.synced_at, id: last.id }) : "null"
+          }}`
+        );
       } catch (e) {
         return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
       }
