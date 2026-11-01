@@ -122,7 +122,7 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 .dot.on{background:var(--good)}
 dialog{border:0;background:var(--surf);color:var(--ink);width:100%;max-width:560px;margin:auto auto 0;padding:20px 18px calc(22px + env(safe-area-inset-bottom));border-radius:28px 28px 0 0;max-height:92vh;overflow:auto}
 dialog::backdrop{background:rgba(0,0,0,.6)}
-dialog.pop{position:fixed;inset:auto;top:var(--pt,60px);right:16px;left:auto;margin:0;width:min(229px,calc(100% - 32px));max-height:calc(100vh - var(--pt,60px) - 20px);padding:10px 0;border-radius:32px;background:linear-gradient(#262627,#202020 35%);--psep:#323232;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 8px 30px rgba(0,0,0,.45);overflow-y:auto}
+dialog.pop{position:fixed;inset:auto;top:var(--pt,60px);right:var(--pr,16px);left:auto;margin:0;width:min(229px,calc(100% - 32px));max-height:calc(100vh - var(--pt,60px) - 20px);padding:10px 0;border-radius:32px;background:linear-gradient(#262627,#202020 35%);--psep:#323232;-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);box-shadow:0 8px 30px rgba(0,0,0,.45);overflow-y:auto}
 :root[data-theme=light] dialog.pop{background:linear-gradient(#f9f9fb,#f2f2f4 35%);--psep:#d9d9dc;box-shadow:0 8px 30px rgba(0,0,0,.18)}
 dialog.pop::backdrop{background:transparent}
 .pop .act{background:none;border-radius:0;margin:0;padding:8px 24px 8px 20px;font-size:14px;font-weight:400;gap:11px;line-height:20px}
@@ -150,6 +150,11 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
 .cedit .x{padding:6px 7px;line-height:1;display:grid;place-items:center}
 .cedit .x svg.i{width:20px;height:20px}
 .cedit .x.on{color:var(--acc)}
+[data-grip]{cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:var(--mute);display:grid;place-items:center;padding:6px 8px;flex:none}
+[data-grip] svg.i{width:20px;height:20px}
+.dragging{position:relative;z-index:20;background:var(--surf2);border-radius:12px;box-shadow:0 6px 22px rgba(0,0,0,.4);cursor:grabbing;opacity:.97}
+.dragging [data-grip]{cursor:grabbing}
+.ib.stopg{color:var(--again)}
 .cedit .x:disabled{opacity:.25;cursor:default}
 </style>
 </head>
@@ -258,6 +263,8 @@ const ICONS={
  star:'<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1.1 5.9L12 17l-5.3 2.7 1.1-5.9L3.5 9.7l5.9-.8z"/>',
  note:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/>',
  pin:'<path d="M9 4h6l-1 5.5 3 3V15H7v-2.5l3-3z"/><path d="M12 15v5"/>',
+ stop:'<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>',
+ grip:'<g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></g>',
  export:'<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/>'};
 const ico=k=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]||''}</svg>`;
 const ib=(attr,k,label,cls='',badge)=>`<button class="ib ${cls}" ${attr} title="${label}" aria-label="${label}">${ico(k)}${badge?`<span class="bg">${badge}</span>`:''}</button>`;
@@ -306,6 +313,31 @@ function moveCat(n,d){const l=orderedCats(),pin=CPIN(),pn=pin.includes(n);
  const g=l.filter(x=>pin.includes(x)===pn),other=l.filter(x=>pin.includes(x)!==pn),i=g.indexOf(n),j=i+d;
  if(i<0||j<0||j>=g.length)return;[g[i],g[j]]=[g[j],g[i]];
  lsave('catOrder',pn?[...g,...other]:[...other,...g]);render()}
+
+/* drag-to-reorder (mouse + touch): grab an element with [data-grip] */
+function dragSort(box,itemSel,onDrop){
+ box.addEventListener('pointerdown',e=>{
+  const h=e.target.closest('[data-grip]');if(!h||(e.pointerType==='mouse'&&e.button!==0))return;
+  const it=h.closest(itemSel);if(!it||!box.contains(it))return;
+  e.preventDefault();
+  const par=it.parentElement,sibs=()=>[...par.children].filter(x=>x.matches(itemSel)&&x.dataset.grp===it.dataset.grp);
+  const grab=e.clientY-it.getBoundingClientRect().top;
+  it.classList.add('dragging');try{h.setPointerCapture(e.pointerId)}catch{}
+  const move=ev=>{
+   const others=sibs().filter(x=>x!==it);let before=null;
+   it.style.transform='none';
+   for(const o of others){const r=o.getBoundingClientRect();if(ev.clientY<r.top+r.height/2){before=o;break}}
+   const last=others[others.length-1];
+   const want=before||(last?last.nextSibling:null);
+   if(want!==it.nextSibling&&want!==it)par.insertBefore(it,want);
+   it.style.transform=`translateY(${Math.round(ev.clientY-grab-it.getBoundingClientRect().top)}px)`;
+   if(ev.clientY<60)scrollBy(0,-14);else if(ev.clientY>innerHeight-60)scrollBy(0,14)};
+  const end=ev=>{
+   document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',end);document.removeEventListener('pointercancel',end);
+   it.style.transform='';it.classList.remove('dragging');
+   h.addEventListener('click',x=>x.stopPropagation(),{once:true,capture:true});
+   onDrop(sibs().map(x=>x.dataset.key))};
+  document.addEventListener('pointermove',move);document.addEventListener('pointerup',end);document.addEventListener('pointercancel',end)})}
 function migrateCat(a,b){['catPins','catOrder'].forEach(k=>{const l=jl(k),i=l.indexOf(a);if(i>=0){l[i]=b;lsave(k,[...new Set(l)])}})}
 function dropCat(n){['catPins','catOrder'].forEach(k=>{const l=jl(k);if(l.includes(n))lsave(k,l.filter(x=>x!==n))})}
 async function resetCards(list){const now=Date.now();
@@ -489,7 +521,7 @@ function renderSelbar(){const b=$('#selbar');if(!selMode||tab!=='cards'){b.style
  b.innerHTML=`<div class="n">${n} selected</div>`
   +ib('data-sa',all?'desel':'selall',all?'Deselect all':'Select all')
   +ib('data-sm'+(n?'':' disabled'),'move','Move')
-  +(nr?ib('data-sg','gen','Generate remaining','',nr):'')
+  +(nr?ib('data-sg','gen','Generate remaining','',nr):'')+(genBusy?ib('data-stopgen','stop','Stop generating','stopg'):'')
   +ib('data-sd'+(n?'':' disabled'),'del','Delete','danger')
   +ib('data-sx','done','Done')}
 function renderList(){
@@ -506,14 +538,14 @@ function renderList(){
   h+=`<div class="catline">${ib('data-selmode',selMode?'done':'select',selMode?'Done':'Select',selMode?'on':'')}`
   +(openCat&&!selMode?ib('data-pincat','pin',isPinned(openCat)?'Unpin category':'Pin category',isPinned(openCat)?'on':'')+(openCat===FAVN?'':ib('data-renamecat','rename','Rename'))+ib('data-resetcat','reset','Reset review')+ib('data-sortcat','sort','Sort')+(openCat!==FAVN&&cs0.some(c=>c.fields&&c.fields.length)?ib('data-layoutcat','layout','Front / back fields',catLayout(openCat)?'on':''):'')
    +(()=>{const t=cards.filter(c=>inCat(c,openCat)&&c.status==='ready'),a=t.length&&t.every(c=>c.rev);return t.length?ib('data-revcat','flip',a?'Restore normal order':'Reverse all cards',a?'on':''):''})()
-   +ib('data-exportcat','export','Export to Excel')+(nr?ib('data-gencat','gen','Generate remaining','',nr):'')+(openCat===FAVN?'':ib('data-delcat','del','Delete all','danger')):'')+'</div>'}
+   +ib('data-exportcat','export','Export to Excel')+(nr?ib('data-gencat','gen','Generate remaining','',nr):'')+(genBusy?ib('data-stopgen','stop','Stop generating','stopg'):'')+(openCat===FAVN?'':ib('data-delcat','del','Delete all','danger')):'')+'</div>'}
  if(!flat&&allCats().length)h+=`<div class="catline">${ib('data-catedit',catEdit?'done':'sort',catEdit?'Done':'Reorder & pin',catEdit?'on':'')}${catEdit?'':ib('data-exportall','export','Export all to Excel')}</div>`;
  head.innerHTML=h;
  renderHeader();renderSelbar();
  if(!flat){const l=orderedCats(),pin=CPIN();
   list.innerHTML=l.length?l.map(n=>{const cs=cards.filter(c=>inCat(c,n)),pn=pin.includes(n),g=l.filter(x=>pin.includes(x)===pn),gi=g.indexOf(n);
-   const tail=catEdit?`<div class="cedit"><button class="x ${pn?'on':''}" data-pin="${esc(n)}" title="${pn?'Unpin':'Pin'}" aria-label="${pn?'Unpin':'Pin'}">${ico('pin')}</button><button class="x" data-mvc="${esc(n)}" data-d="-1" aria-label="Move up" style="font-size:15px"${gi===0?' disabled':''}>▲</button><button class="x" data-mvc="${esc(n)}" data-d="1" aria-label="Move down" style="font-size:15px"${gi===g.length-1?' disabled':''}>▼</button></div>`:'<span class="chev">›</span>';
-   return `<div class="it"${catEdit?'':` data-open="${esc(n)}"`}><div class="ic f">${FOLDER}</div><div class="bd"><div class="tx"><b>${esc(n)}${pn?PINI:''}</b><small>${cs.length} card${cs.length===1?'':'s'} · ${cs.filter(isDue).length} due</small></div>${tail}</div></div>`}).join('')
+   const tail=catEdit?`<div class="cedit"><button class="x ${pn?'on':''}" data-pin="${esc(n)}" title="${pn?'Unpin':'Pin'}" aria-label="${pn?'Unpin':'Pin'}">${ico('pin')}</button><span data-grip aria-label="Drag to reorder" title="Drag to reorder">${ico('grip')}</span></div>`:'<span class="chev">›</span>';
+   return `<div class="it"${catEdit?` data-key="${esc(n)}" data-grp="${pn?1:0}"`:` data-open="${esc(n)}"`}><div class="ic f">${FOLDER}</div><div class="bd"><div class="tx"><b>${esc(n)}${pn?PINI:''}</b><small>${cs.length} card${cs.length===1?'':'s'} · ${cs.filter(isDue).length} due</small></div>${tail}</div></div>`}).join('')
    +(()=>{const k=skippedList().length;return k?`<div class="it" data-skipped="1"><div class="ic f" style="color:var(--mute)"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 5v5l4 2-.8 1.8L11 13V7z"/></svg></div><div class="bd"><div class="tx"><b>Skipped</b><small>${k} card${k===1?'':'s'} · hidden from review</small></div><span class="chev">›</span></div></div>`:''})()
    +`<div class="count">${l.length} categor${l.length===1?'y':'ies'}</div>`
    :'<div class="empty">No categories yet.</div>';return}
@@ -535,7 +567,8 @@ async function renameCat(){if(openCat===FAVN)return;const n=(prompt('Category na
 async function resetCat(){const t=cards.filter(c=>inCat(c,openCat)&&c.status==='ready');
  if(!t.length||!confirm(`Reset review for ${t.length} card${t.length>1?'s':''} in "${openCat}"?`))return;
  await resetCards(t);toast('Review reset')}
-function openSort(){const o=catSort(openCat);
+var sortTarget=null;
+function openSort(cat){sortTarget=cat||openCat;const o=catSort(sortTarget);
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Sort</b><button class="x" data-close aria-label="Close">✕</button></div>
  <label for="sk">Sort by</label><select id="sk"><option value="file">Original order (import file)</option><option value="alpha">Alphabetical</option><option value="added">Date added</option></select>
  <label for="sd">Direction</label><select id="sd"><option value="asc">Ascending</option><option value="desc">Descending</option></select>
@@ -549,15 +582,14 @@ function openLayout(cat){const CT=cat||openCat;
  if(L.order&&L.order.length){const o=L.order;names=[...o.filter(n=>names.includes(n)),...names.filter(n=>!o.includes(n))]}
  const F=new Set(L.front||[]),B=new Set(L.back||[]);
  const sample=n=>{const c=cs.find(c=>fieldVal(c,n));return c?fieldVal(c,n).replace(/\s+/g,' ').slice(0,40):''};
- const arr=(i,d)=>{const off=(d<0&&i===0)||(d>0&&i===names.length-1);return `<button class="x" data-mv="${i}" data-d="${d}" aria-label="${d<0?'Move up':'Move down'}" style="font-size:16px;padding:4px 8px${off?';opacity:.25':''}"${off?' disabled':''}>${d<0?'▲':'▼'}</button>`};
- const rows=()=>names.map((n,i)=>`<div style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--surf2)">
-  <div style="display:flex;flex-direction:column">${arr(i,-1)}${arr(i,1)}</div>
+ const rows=()=>names.map((n,i)=>`<div class="lyrow" data-key="${i}" style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--surf2)">
+  <span data-grip aria-label="Drag to reorder" title="Drag to reorder">${ico('grip')}</span>
   <div style="min-width:0"><b dir="auto">${esc(n)}</b><div class="pron" dir="auto" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sample(n))}</div></div>
   <label style="font-size:13px"><input type="checkbox" data-f="${i}"${F.has(n)?' checked':''}> Front</label>
   <label style="font-size:13px"><input type="checkbox" data-b="${i}"${B.has(n)?' checked':''}> Back</label></div>`).join('');
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Front / back fields</b><button class="x" data-close aria-label="Close">✕</button></div>
  <div class="row" style="margin:6px 0 10px"><button class="btn pri" id="lySave">Save</button><button class="btn" id="lyDef">Default</button><button class="btn" id="lyNo">Cancel</button></div>
- <p class="pron" style="font-size:13px">Choose which fields of "${esc(CT)}" appear on the front and on the back, and use ▲ ▼ to change their order. Applies to this category's cards.</p>
+ <p class="pron" style="font-size:13px">Choose which fields of "${esc(CT)}" appear on the front and on the back, and drag the ⠿ handle to change their order. Applies to this category's cards.</p>
  <div id="lyRows">${rows()}</div>
  <div class="card" style="min-height:0;margin-top:14px;padding:14px"><small class="pron">Preview</small><div id="lyPrev" style="margin-top:6px"></div></div>`;
  const pick=a=>names.filter(n=>(a==='f'?F:B).has(n));
@@ -566,9 +598,7 @@ function openLayout(cat){const CT=cat||openCat;
  const box=$('#lyRows');
  box.addEventListener('change',e=>{const t=e.target,a=t.dataset.f!==undefined?'f':t.dataset.b!==undefined?'b':null;if(!a)return;
   const n=names[+t.dataset[a]],S=a==='f'?F:B;t.checked?S.add(n):S.delete(n);prev()});
- box.addEventListener('click',e=>{const m=e.target.closest('[data-mv]');if(!m||m.disabled)return;
-  const i=+m.dataset.mv,j=i+(+m.dataset.d);if(j<0||j>=names.length)return;
-  [names[i],names[j]]=[names[j],names[i]];box.innerHTML=rows();prev()});
+ dragSort(box,'.lyrow',keys=>{names=keys.map(k=>names[+k]);box.innerHTML=rows();prev()});
  prev();
  const apply=()=>{cur=null;shown=false;render()};
  $('#lySave').onclick=()=>{const f=pick('f'),b=pick('b');if(!f.length)return toast('Pick at least one field for the front');
@@ -597,6 +627,8 @@ $('#catHead').addEventListener('click',e=>{
  else if(e.target.closest('[data-exportcat]'))exportCat(openCat)
  else if(e.target.closest('[data-catedit]')){catEdit=!catEdit;renderList()}
  else if(e.target.closest('[data-exportall]'))exportAll()});
+dragSort($('#list'),'.it[data-key]',keys=>{if(!keys.length)return;const pin=CPIN(),pn=pin.includes(keys[0]),other=orderedCats().filter(x=>pin.includes(x)!==pn);
+ lsave('catOrder',pn?[...keys,...other]:[...other,...keys]);render()});
 $('#list').addEventListener('click',async e=>{
  let pb;
  if(pb=e.target.closest('[data-pin]')){togglePin(pb.dataset.pin);return}
@@ -624,7 +656,7 @@ $('#selbar').addEventListener('click',async e=>{const t=e.target.closest('button
 /* ---------- header actions ---------- */
 $('#back').onclick=()=>{if(tab==='study'&&studyOpen){closeDeck();return}if(tab==='set'&&spOpen){openSp(null);return}if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
 function showSheet(a,title,pop){const d=$('#sheet');d.classList.toggle('pop',!!pop);
- if(pop){const r=$('#more').getBoundingClientRect();d.style.setProperty('--pt',Math.round(r.top)+'px')}
+ if(pop){const r=$('#more').getBoundingClientRect();d.style.setProperty('--pt',Math.round(r.top)+'px');d.style.setProperty('--pr',(innerWidth>600?Math.max(16,Math.round(innerWidth-r.right)):16)+'px')}
  $('#sheetBody').innerHTML=(title?`<b class="big" style="display:block;margin-bottom:6px">${esc(title)}</b>`:'')+a.map((x,i)=>`<button class="act ${x[2]?'danger':''} ${x[4]?'sep':''}" data-i="${i}">${x[3]?ico(x[3]):''}<span>${esc(x[0])}</span></button>`).join('');
  d.onclick=e=>{const b=e.target.closest('[data-i]');if(b){d.close();a[+b.dataset.i][1]();return}
   const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close()};
@@ -637,11 +669,21 @@ $('#more').onclick=()=>{const a=[];
   a.push([c.fav?'Remove from favorites':'Add to favorites',()=>toggleFav(c),0,'star'])}
  if(tab==='study'&&studyOpen){
   if(studyCat&&cards.some(c=>inCat(c,studyCat)&&c.fields&&c.fields.length))a.push(['Front / back fields',()=>openLayout(studyCat),0,'layout']);
+  if(studyCat)a.push(['Sort',()=>openSort(studyCat),0,'sort']);
   const rt=cards.filter(c=>inStudy(c)&&c.status==='ready');
   if(rt.length)a.push([rt.every(c=>c.rev)?'Restore normal order':'Reverse all cards',()=>reverseCat(inStudy),0,'flip'])}
- if(tab==='cards'&&openCat){const pinI=[isPinned(openCat)?'Unpin category':'Pin category',()=>togglePin(openCat),0,'pin'],expI=['Export to Excel',()=>exportCat(openCat),0,'export'];
-  a.push(...(openCat===FAVN?[pinI,expI,['Reset review',resetCat,0,'reset'],['Reverse all cards',reverseCat,0,'flip']]:[pinI,['Rename category',renameCat,0,'rename'],expI,['Reset review',resetCat,0,'reset'],['Reverse all cards',reverseCat,0,'flip'],['Delete all cards',deleteCat,1,'del']]))}
+ if(tab==='cards'&&openCat){const isF=openCat===FAVN,cs0=cards.filter(c=>inCat(c,openCat)),nr=cs0.filter(c=>c.status!=='ready').length,rt=cs0.filter(c=>c.status==='ready');
+  a.push(['Select',()=>{selMode=true;sel.clear();renderList()},0,'select'],
+   [isPinned(openCat)?'Unpin category':'Pin category',()=>togglePin(openCat),0,'pin'],
+   ...(isF?[]:[['Rename category',renameCat,0,'rename']]),
+   ['Reset review',resetCat,0,'reset'],['Sort',()=>openSort(),0,'sort'],
+   ...(!isF&&cs0.some(c=>c.fields&&c.fields.length)?[['Front / back fields',()=>openLayout(),0,'layout']]:[]),
+   ...(rt.length?[[rt.every(c=>c.rev)?'Restore normal order':'Reverse all cards',()=>reverseCat(),0,'flip']]:[]),
+   ['Export to Excel',()=>exportCat(openCat),0,'export'],
+   ...(nr&&!genBusy?[['Generate remaining',()=>requestGen(cs0),0,'gen']]:[]),
+   ...(isF?[]:[['Delete all cards',deleteCat,1,'del']]))}
  if(tab==='cards'&&!openCat&&cards.length)a.push(['Reorder & pin',()=>{catEdit=true;renderList()},0,'sort'],['Export all to Excel',exportAll,0,'export']);
+ if(genBusy)a.push(['Stop generating',stopGen,1,'stop']);
  a.push(['Sync now',()=>sync(true),0,'sync',a.length],['Switch theme',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'),0,'theme']);
  showSheet(a,'',true)};
 
@@ -653,7 +695,7 @@ function openDetail(id){editFromStudy=false;const c=cards.find(x=>x.id===id);if(
   +(c.status==='ready'?`<label class="tg" for="rv"><span>Reverse this card<small>Show the meaning on the front, the word on the back</small></span><input type="checkbox" class="sw" id="rv" data-id="${esc(c.id)}"${c.rev?' checked':''}></label>`:'')
   +`<label for="mv">Category</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
   +(c.status==='ready'?`<p class="pron" style="margin-top:12px">${c.skipped&&c.due>Date.now()?`Skipped — returns ${new Date(c.due).toLocaleDateString('en-US')}`:'Next review: '+fmtDue(c.due)}${c.fs&&c.fs.stability>0?(()=>{const r=fsRet(c.fs,Date.now());return `<br><small>Stability ${c.fs.stability.toFixed(1)} d · Difficulty ${c.fs.difficulty.toFixed(1)}${r==null?'':' · Retrievability '+Math.round(r*100)+'%'}</small>`})():''}</p>`:'')
-  +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}${c.skipped&&c.due>Date.now()?`<button class="btn" data-unskip="${esc(c.id)}">Return to review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
+  +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}${genBusy?'<button class="btn" data-stopgen type="button">Stop</button>':''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}${c.skipped&&c.due>Date.now()?`<button class="btn" data-unskip="${esc(c.id)}">Return to review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
  if(!$('#dlg').open)$('#dlg').showModal()}
 function openEdit(id){const c=cards.find(x=>x.id===id);if(!c)return;const d=c.data||{};
  const ex=[...(d.examples||[]),{},{},{}].slice(0,3);
@@ -683,7 +725,7 @@ $('#dlg').addEventListener('click',async e=>{
  if(v=at('delone')){if(!confirm('Delete this card?'))return;const c=cards.find(x=>x.id===v);c.deleted=true;await save(c);$('#dlg').close();await refresh();return}
  if(t.closest('[data-close]')||t===$('#dlg'))$('#dlg').close()});
 $('#dlg').addEventListener('change',async e=>{
- if(e.target.id==='sk'||e.target.id==='sd'){setCatSort(openCat,{k:$('#sk').value,d:$('#sd').value});renderList();return}
+ if(e.target.id==='sk'||e.target.id==='sd'){setCatSort(sortTarget||openCat,{k:$('#sk').value,d:$('#sd').value});render();return}
  if(e.target.id==='rv'){const c=cards.find(x=>x.id===e.target.dataset.id);if(!c)return;c.rev=e.target.checked;await save(c);await refresh();
   if(cur&&cur.id===c.id){cur=cards.find(x=>x.id===c.id)||null;shown=false;recs=null;renderStudy()}toast(c.rev?'Card reversed':'Card back to normal');return}
  if(e.target.id!=='mv')return;
@@ -817,30 +859,32 @@ impBox.addEventListener('drop',e=>{const f=e.dataTransfer&&e.dataTransfer.files[
 
 /* ---------- AI generation (queued, offline-safe) ---------- */
 const KEY=()=>localStorage.getItem('appKey')||'';
-let genBusy=false;
+var genBusy=false,genStop=false,genCtl=null;
+function stopGen(){if(!genBusy)return;genStop=true;try{genCtl&&genCtl.abort()}catch{}toast('Stopping…',1500)}
+document.addEventListener('click',e=>{if(e.target.closest('[data-stopgen]'))stopGen()});
 async function gen(list){
  list=(list||[]).filter(c=>c&&c.status!=='ready');if(!list.length)return;
  if(genBusy)return toast('Already generating…');
  if(!KEY())return toast('Enter the access key in Settings first');
  if(!navigator.onLine)return toast('You are offline');
- genBusy=true;const total=list.length;let left=total,ok=0,stop='';
+ genBusy=true;genStop=false;genCtl=new AbortController();const total=list.length;let left=total,ok=0,stop='';render();
  try{
-  for(let i=0;i<list.length&&!stop;i+=3){
+  for(let i=0;i<list.length&&!stop&&!genStop;i+=3){
    const chunk=list.slice(i,i+3);
-   $('#queue').textContent=`Generating… ${left} left`;toast(`Generating… ${left} left`,60000);
+   $('#queue').innerHTML=`Generating… ${left} left <button class="btn sm" data-stopgen type="button">Stop</button>`;toast(`Generating… ${left} left`,60000);
    await Promise.all(chunk.map(async c=>{
-    try{const r=await fetch('/api/generate',{method:'POST',headers:{'content-type':'application/json','x-app-key':KEY()},body:JSON.stringify({word:c.word})});
+    try{const r=await fetch('/api/generate',{method:'POST',signal:genCtl.signal,headers:{'content-type':'application/json','x-app-key':KEY()},body:JSON.stringify({word:c.word})});
      if(r.status===401){stop='Wrong access key';return}
      const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
      c.data=j.data;c.status='ready';c.due=Date.now();delete c.err;ok++}
-    catch(e){const m=String(e.message||e);if(m.includes('4006'))stop='AI quota used up for today. Try again later.';else{c.status='error';c.err=m.slice(0,300)}}
+    catch(e){if(genStop||e.name==='AbortError')return;const m=String(e.message||e);if(m.includes('4006'))stop='AI quota used up for today. Try again later.';else{c.status='error';c.err=m.slice(0,300)}}
     left--;
     const cur=await new Promise(r=>{const q=store('readonly').get(c.id);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)});
     if(cur&&cur.deleted)return;
     if(c.status==='ready'||c.status==='error')await save(c)}));
    await refresh()}
- }finally{genBusy=false;$('#queue').textContent='';
-  toast(stop?`${stop}${ok?` (${ok} generated)`:''}`:`Generated ${ok} of ${total}`,4000)}
+ }finally{const wasStop=genStop;genBusy=false;genStop=false;genCtl=null;$('#queue').textContent='';render();
+  toast(wasStop?`Generation stopped${ok?` (${ok} generated)`:''}`:stop?`${stop}${ok?` (${ok} generated)`:''}`:`Generated ${ok} of ${total}`,4000)}
 }
 
 /* ---------- sync ---------- */
