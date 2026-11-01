@@ -703,12 +703,14 @@ async function gen(list){
 }
 
 /* ---------- sync ---------- */
-let syncT,syncing=false,syncAgain=false,syncFail=0,syncBytes=Math.min(120000,Math.max(6000,+localStorage.syncBytes||40000));
+let syncT,syncing=false,syncAgain=false,syncFail=0;
+// request size adapts per direction: grows after every success, halves after a dropped connection
+let SZ={pull:150000,push:60000};try{const o=JSON.parse(localStorage.syncSZ||'null');if(o&&o.pull&&o.push)SZ=o}catch{}
+const szAdj=(k,up)=>{SZ[k]=Math.round(Math.min(500000,Math.max(6000,up?SZ[k]*1.4:SZ[k]/2)));try{localStorage.syncSZ=JSON.stringify(SZ)}catch{}};
 const scheduleSync=()=>{clearTimeout(syncT);syncT=setTimeout(sync,2500)};
 function syncState(t,on){$('#syncState').textContent=t;$('#dot').className='dot'+(on?' on':'')}
 const jget=k=>{try{return JSON.parse(localStorage.getItem(k)||'null')}catch{return null}};
 const lset=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,JSON.stringify(v))}catch{}};
-const setBytes=v=>{syncBytes=Math.min(120000,Math.max(6000,v));try{localStorage.syncBytes=syncBytes}catch{}};
 const KB=n=>Math.round(n/1024)+' KB';
 async function sync(manual){
  if(syncing){syncAgain=true;return} // a change made during a running sync is pushed right after it
@@ -717,25 +719,25 @@ async function sync(manual){
  syncing=true;let retry=0,progress=false;
  try{const OV=600000,full=manual===true,since=full?0:Math.max(0,(+localStorage.since||0)-OV),lastPush=full?0:Math.max(0,(+localStorage.lastPush||0)-OV);
   // one request; big bodies are gzipped (much smaller upload, and the connection survives more often)
-  const post=async(b,what)=>{let body=JSON.stringify(b);const h={'content-type':'application/json','x-app-key':KEY()};
+  const post=async(b,what,kind)=>{let body=JSON.stringify(b);const h={'content-type':'application/json','x-app-key':KEY()};
    try{if(body.length>3000&&typeof CompressionStream!=='undefined'){body=await new Response(new Blob([body]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();h['x-gz']='1'}}catch{}
-   let r;try{r=await fetch('/api/sync',{method:'POST',headers:h,body})}catch(e){throw new TypeError(what+': '+e.message)}
+   let r;try{r=await fetch('/api/sync',{method:'POST',headers:h,body})}catch(e){szAdj(kind,false);throw new TypeError(what+': '+e.message)}
    if(r.status===401){syncState('Wrong access key');return null}
    if(!r.ok){let t='';try{t=(await r.json()).error||''}catch{}throw new Error(what+': HTTP '+r.status+' '+t)}
-   try{return await r.json()}catch(e){throw new TypeError(what+': response cut off')}};
+   try{const j=await r.json();szAdj(kind,true);return j}catch(e){szAdj(kind,false);throw new TypeError(what+': response cut off')}};
   // 1) PULL first, in pages limited by size; every page is applied and its position saved at once
   const srv=new Map(),pu=jget('pullCur');
   if(!(jget('pushPlan'))){ // (if a push plan exists the pull of this round is already finished)
    let cursor={t:since,id:''},now=0,n=0,changed=false;
    if(pu&&pu.since===since){cursor={t:pu.t,id:pu.id};now=pu.now;n=pu.n||0}
-   for(;;){const j=await post({cards:[],since:cursor.t,after:cursor.id,limit:300,maxBytes:syncBytes},'pull page '+(n+1));if(!j)return;
+   for(;;){const j=await post({cards:[],since:cursor.t,after:cursor.id,limit:500,maxBytes:SZ.pull},'pull page '+(n+1),'pull');if(!j)return;
     if(!now)now=j.now;
     j.cards.forEach(c=>srv.set(c.id,c.updatedAt||0));
     const cur=await getMany(j.cards.map(c=>c.id));
     const fresh=j.cards.filter((c,i)=>!cur[i]||c.updatedAt>cur[i].updatedAt);if(fresh.length){await putMany(fresh);changed=true}
     n++;progress=true;
     if(!j.more||!j.cursor)break;cursor=j.cursor;lset('pullCur',{since,t:cursor.t,id:cursor.id,now,n});
-    syncState(`Syncing… page ${n} (${KB(syncBytes)} each)`)}
+    syncState(`Syncing… received page ${n}`)}
    localStorage.since=now;lset('pullCur',null);if(changed)await refresh()}
   // 2) PUSH only what the server does not already have, oldest first, in size-limited gzipped chunks
   let plan=jget('pushPlan');
@@ -744,21 +746,19 @@ async function sync(manual){
     .sort((x,y)=>x.updatedAt-y.updatedAt||(x.id<y.id?-1:1)).map(c=>c.id);
    plan={ids,pos:0,t0:Date.now()};if(ids.length)lset('pushPlan',plan)}
   while(plan.pos<plan.ids.length){
-   const rows=(await getMany(plan.ids.slice(plan.pos,plan.pos+300))).filter(Boolean);
+   const rows=(await getMany(plan.ids.slice(plan.pos,plan.pos+500))).filter(Boolean);
    // take as many cards as fit the size budget (at least one)
-   let sz=0,take=0;const ids=plan.ids.slice(plan.pos,plan.pos+300);
-   for(const c of rows){const l=JSON.stringify(c).length;if(take&&sz+l>syncBytes)break;sz+=l;take++}
+   let sz=0,take=0;const ids=plan.ids.slice(plan.pos,plan.pos+500);
+   for(const c of rows){const l=JSON.stringify(c).length;if(take&&sz+l>SZ.push)break;sz+=l;take++}
    const part=rows.slice(0,take),used=part.length?ids.indexOf(part[part.length-1].id)+1:ids.length;
-   if(part.length&&!await post({cards:part,since:9e15},`push ${plan.pos+used}/${plan.ids.length} (${KB(sz)})`))return;
+   if(part.length&&!await post({cards:part,since:9e15},`push ${plan.pos+used}/${plan.ids.length} (${KB(sz)})`,'push'))return;
    plan.pos+=used;lset('pushPlan',plan);progress=true;
    syncState(`Syncing… sent ${plan.pos}/${plan.ids.length}`)}
   localStorage.lastPush=plan.t0;lset('pushPlan',null);syncFail=0;
-  if(syncBytes<120000)setBytes(syncBytes+8000);
   if(manual===true)await refresh();syncState('Synced · '+new Date().toLocaleTimeString('en-US'),true);if(manual===true)toast('Synced')
  }catch(e){
-  if(progress){syncFail=0;retry=1500} // it moved forward before the connection dropped: just continue
-  else{syncFail++;retry=Math.min(15000*syncFail,120000);
-   if(e instanceof TypeError)setBytes(Math.floor(syncBytes/2))} // smaller requests next time
+  if(progress){syncFail=0;retry=400} // it moved forward before the connection dropped: just continue
+  else{syncFail++;retry=Math.min(15000*syncFail,120000)}
   syncState('Sync interrupted: '+String(e.message||e).slice(0,110)+' — continuing')}
  finally{syncing=false;
   if(retry)setTimeout(sync,retry);else if(syncAgain){syncAgain=false;setTimeout(sync,500)}}}
