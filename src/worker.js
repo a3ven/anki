@@ -202,7 +202,7 @@ export default {
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
-      const { cards = [], since = 0 } = await req.json();
+      const { cards = [], since = 0, after = "", limit = 0 } = await req.json();
       const now = Date.now();
       try {
         const valid = cards.filter((c) => c && c.id);
@@ -213,8 +213,23 @@ export default {
             )
           );
         }
-        const { results } = await env.DB.prepare("SELECT data FROM cards WHERE synced_at > ?").bind(since).all();
-        return json({ cards: results.map((r) => JSON.parse(r.data)), now });
+        // Pulling is paged (limit + cursor) so one response never gets huge and cut off by the network.
+        // Old clients send no limit and still get everything in one response.
+        const lim = Math.min(Math.max(parseInt(limit) || 0, 0), 500);
+        if (!lim) {
+          const { results } = await env.DB.prepare("SELECT data FROM cards WHERE synced_at > ?").bind(since).all();
+          return json({ cards: results.map((r) => JSON.parse(r.data)), now });
+        }
+        const { results } = await env.DB.prepare(
+          "SELECT id, data, synced_at FROM cards WHERE synced_at > ? OR (synced_at = ? AND id > ?) ORDER BY synced_at, id LIMIT ?"
+        ).bind(since, since, String(after), lim).all();
+        const last = results[results.length - 1];
+        return json({
+          cards: results.map((r) => JSON.parse(r.data)),
+          now,
+          more: results.length === lim,
+          cursor: last ? { t: last.synced_at, id: last.id } : null,
+        });
       } catch (e) {
         return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
       }
