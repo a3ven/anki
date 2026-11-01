@@ -1,5 +1,5 @@
-const V = "v6";
-const SHELL = ["/", "/manifest.json", "/icon.svg"];
+const V = "v8";
+const SHELL = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png", "/favicon.ico"];
 const LIBS = [
   "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js",
   "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js",
@@ -22,7 +22,7 @@ self.addEventListener("activate", (e) => {
 });
 self.addEventListener("fetch", (e) => {
   const r = e.request, u = new URL(r.url);
-  if (r.method !== "GET" || u.pathname.startsWith("/api/")) return;
+  if (r.method !== "GET" || !u.protocol.startsWith("http") || u.pathname.startsWith("/api/")) return;
   if (r.mode === "navigate") {
     e.respondWith(
       fetch(r).then((x) => { const cp = x.clone(); caches.open(V).then((c) => c.put("/", cp)); return x; })
