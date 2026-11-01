@@ -203,7 +203,11 @@ export default {
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
-      const { cards = [], since = 0, after = "", limit = 0 } = await req.json();
+      // bodies may be gzipped by the app (header x-gz) to survive flaky uploads
+      const raw = req.headers.get("x-gz")
+        ? await new Response(req.body.pipeThrough(new DecompressionStream("gzip"))).text()
+        : await req.text();
+      const { cards = [], since = 0, after = "", limit = 0, maxBytes = 0 } = JSON.parse(raw);
       const now = Date.now();
       try {
         const valid = cards.filter((c) => c && c.id);
@@ -226,9 +230,20 @@ export default {
         const { results } = await env.DB.prepare(
           "SELECT id, data, synced_at FROM cards WHERE (synced_at, id) > (?, ?) ORDER BY synced_at, id LIMIT ?"
         ).bind(since, String(after), lim).all();
-        const last = results[results.length - 1];
+        // also cap the page by size (maxBytes), always returning at least one card
+        let rows = results, trimmed = false;
+        const mb = parseInt(maxBytes) || 0;
+        if (mb) {
+          let sz = 0, k = 0;
+          for (; k < rows.length; k++) {
+            sz += rows[k].data.length;
+            if (k > 0 && sz > mb) { trimmed = true; break; }
+          }
+          rows = rows.slice(0, k);
+        }
+        const last = rows[rows.length - 1];
         return out(
-          `{"cards":[${results.map((r) => r.data).join(",")}],"now":${now},"more":${results.length === lim},"cursor":${
+          `{"cards":[${rows.map((r) => r.data).join(",")}],"now":${now},"more":${trimmed || results.length === lim},"cursor":${
             last ? JSON.stringify({ t: last.synced_at, id: last.id }) : "null"
           }}`
         );
