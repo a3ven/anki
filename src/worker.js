@@ -1,5 +1,14 @@
 const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
+// Cloudflare models, tried in this order (first one that works wins).
+// [model id, use JSON mode?]
+const CF_MODELS = [
+  ["@cf/qwen/qwen3.8-27b", false],
+  ["@cf/deepseek-ai/deepseek-v4-flash-0731", false],
+  [MODEL, true],
+  [MODEL, false],
+];
+
 const SYS = `You build flashcard data for a Persian speaker learning English.
 The user gives ONE word or phrase, in English or in Persian.
 Reply with ONLY one JSON object, no markdown, no extra text:
@@ -20,10 +29,20 @@ Rules: Persian must sound like real speech (e.g. «می‌خوام», «نمی�
 const json = (o, s = 200) =>
   new Response(JSON.stringify(o), { status: s, headers: { "content-type": "application/json" } });
 
+// Accepts the different output shapes of Workers AI models:
+//  - {response: "..."} or {response: {...}}  (Llama, JSON mode)
+//  - {choices:[{message:{content:"..."}}]}   (OpenAI-style: Qwen, DeepSeek, gpt-oss)
+//  - {result:{response:"..."}} / {output_text:"..."}
 function parse(out) {
-  let r = out?.response;
+  let r =
+    out?.response ??
+    out?.choices?.[0]?.message?.content ??
+    out?.result?.response ??
+    out?.output_text;
   if (r && typeof r === "object") return r;
-  const m = String(r || "").match(/\{[\s\S]*\}/);
+  // reasoning models may print their thinking inside <think>...</think>
+  const txt = String(r || "").replace(/<think>[\s\S]*?<\/think>/gi, "");
+  const m = txt.match(/\{[\s\S]*\}/);
   if (!m) throw new Error("bad model output");
   return JSON.parse(m[0]);
 }
@@ -52,19 +71,14 @@ function finish(d) {
 }
 
 async function viaCloudflare(env, word, errs) {
-  const attempts = [
-    [MODEL, true],
-    [MODEL, false],
-    ["@cf/google/gemma-4-26b-a4b-it", false],
-  ];
-  for (const [model, jm] of attempts) {
+  for (const [model, jm] of CF_MODELS) {
     try {
       const opts = {
         messages: [
           { role: "system", content: SYS },
           { role: "user", content: JSON.stringify(word) },
         ],
-        max_tokens: 1500,
+        max_tokens: 2500, // a bit more room in case a model "thinks" before answering
         temperature: 0.3,
       };
       if (jm) opts.response_format = { type: "json_object" };
