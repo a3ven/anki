@@ -58,8 +58,6 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 .studying main{padding-bottom:150px}
 #sdock{position:fixed;left:50%;transform:translateX(-50%);bottom:max(10px,env(safe-area-inset-bottom));width:min(560px,calc(100% - 24px));z-index:6;display:none;padding:10px;background:var(--surf2);border-radius:28px;box-shadow:0 6px 24px rgba(0,0,0,.4)}
 #sdock.on{display:block}
-#sdock .undo{display:flex;align-items:center;gap:6px;margin:0 0 8px;padding:4px 10px;border:0;border-radius:14px;background:transparent;color:var(--mute);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
-#sdock .undo:active{background:var(--surf)}
 #sdock .show,#sdock .rate{margin-top:0}
 .deck small{color:var(--mute);font-size:14px}
 .rate{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:14px}
@@ -446,14 +444,13 @@ function renderStudy(){
  if(!sel.length){el.innerHTML='<div class="empty">No cards in this category.</div>';cur=null;return}
  if(!list.length){const next=sel.filter(c=>c.status==='ready').sort((a,b)=>a.due-b.due)[0];
   const pend=sel.filter(c=>c.status!=='ready').length;
-  el.innerHTML=`<div class="empty">You're all caught up 🎉<br>${next?'Next card: '+fmtDue(next.due):''}${pend?`<br>${pend} card${pend>1?'s':''} waiting to be generated`:''}</div>`;cur=null;
-  if(undoStack.length){dock.innerHTML=undoBtn();dock.className='on'}return}
+  el.innerHTML=`<div class="empty">You're all caught up 🎉<br>${next?'Next card: '+fmtDue(next.due):''}${pend?`<br>${pend} card${pend>1?'s':''} waiting to be generated`:''}</div>`;cur=null;return}
  const keep=cur&&list.find(x=>x.id===cur.id);if(!keep){cur=list[0];shown=false;recs=null}else cur=keep;
  const c=cur;
  if(shown&&(!recs||recs.id!==c.id)){const now=new Date();recs={id:c.id,now:+now,r:fsRepeat(fsLoad(c,now),now)}}
  el.innerHTML=`<div class="top"><span>${list.length} due</span><span>${sel.length} total</span></div>
  <div class="card">${shown?backHtml(c):`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>`;
- dock.innerHTML=undoBtn()+(shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(+recs.r[i+1].due-recs.now)}</small></button>`).join('')}<button class="s" data-r="skip">Skip<small>7 y</small></button></div>`
+ dock.innerHTML=(shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(+recs.r[i+1].due-recs.now)}</small></button>`).join('')}<button class="s" data-r="skip">Skip<small>7 y</small></button></div>`
  :'<button class="btn pri show" id="showBtn">Show answer</button>');
  dock.className='on'}
 let editFromStudy=false;
@@ -480,7 +477,6 @@ const UNDO_KEYS=['fs','due','interval','reps','skipped','skippedAt','hist'];
 let undoStack=[];
 function pushUndo(c){const snap={};UNDO_KEYS.forEach(k=>{if(k in c&&c[k]!==undefined)snap[k]=structuredClone(c[k])});
  undoStack.push({id:c.id,snap});if(undoStack.length>500)undoStack.shift()}
-const undoBtn=()=>undoStack.length?`<button class="undo" data-undo type="button">↩ Undo<small style="font-weight:500"> (${undoStack.length})</small></button>`:'';
 async function undoLast(){
  while(undoStack.length){const u=undoStack.pop(),c=cards.find(x=>x.id===u.id);if(!c||c.deleted)continue;
   UNDO_KEYS.forEach(k=>{if(k in u.snap)c[k]=structuredClone(u.snap[k]);else delete c[k]});
@@ -507,7 +503,6 @@ function openSkipped(){const l=skippedList();
 const studyClick=e=>{
  const dk=e.target.closest('[data-deck]');if(dk)return openDeck(dk.dataset.deck);
  const s=e.target.closest('[data-say]');if(s)return speak(s.dataset.say);
- if(e.target.closest('[data-undo]'))return undoLast();
  const r=e.target.closest('[data-r]');if(r)return rate(r.dataset.r);
  if(e.target.id==='showBtn'){shown=true;recs=null;renderStudy();autoSay()}
 };
@@ -686,7 +681,7 @@ $('#more').onclick=()=>{const a=[];
   if(c.data)a.push(['Add 2 examples with AI',()=>addExamples(c),0,'gen']);
   a.push([c.fav?'Remove from favorites':'Add to favorites',()=>toggleFav(c),0,'star'])}
  if(tab==='study'&&studyOpen){
-  if(undoStack.length)a.push(['Undo last answer',undoLast,0,'reset']);
+  if(undoStack.length)a.push(['Undo last answer ('+undoStack.length+')',undoLast,0,'reset']);
   if(studyCat&&cards.some(c=>inCat(c,studyCat)&&c.fields&&c.fields.length))a.push(['Front / back fields',()=>openLayout(studyCat),0,'layout']);
   if(studyCat)a.push(['Sort',()=>openSort(studyCat),0,'sort']);
   const rt=cards.filter(c=>inStudy(c)&&c.status==='ready');
