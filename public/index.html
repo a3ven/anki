@@ -73,7 +73,8 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 /* settings sections + switch */
 .sgrp{background:var(--surf);border-radius:20px;overflow:hidden}
 .srow{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;color:var(--ink);font:inherit;font-size:17px;padding:15px 16px;text-align:start;cursor:pointer}
-.srow+.srow{border-top:1px solid var(--line)}
+.srow+.srow{border-top:1px solid var(--line)}.srow[hidden]{display:none}
+.urow{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--line)}.urow .nm{flex:1;min-width:0}.urow .nm b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.urow .nm small{color:var(--mute)}.newkey{margin-top:14px;padding:14px 16px;border-radius:16px;background:var(--surf);word-break:break-all}.newkey code{display:block;margin:8px 0;font-size:15px;user-select:all;direction:ltr}
 .srow svg.i{color:var(--acc);flex:none}
 .srow span{flex:1}
 .spg[hidden],#setHome[hidden]{display:none}
@@ -191,6 +192,7 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
     <button class="srow" data-sp="look"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span>Appearance</span><i class="chev">›</i></button>
     <button class="srow" data-sp="iv"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Review (FSRS)</span><i class="chev">›</i></button>
     <button class="srow" data-sp="voice"><svg class="i" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/></svg><span>Pronunciation</span><i class="chev">›</i></button>
+    <button class="srow" data-sp="users" id="usersRow" hidden><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg><span>Users</span><i class="chev">›</i></button>
   </div>
   <div class="spg" id="sp_sync" hidden>
     <label for="key" style="margin-top:4px">Access key (the APP_KEY secret set on the Worker)</label>
@@ -200,6 +202,13 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
       <button class="btn" id="syncNow">Sync now</button>
     </div>
     <p class="pron" style="margin-top:12px"><span class="dot" id="dot"></span><span id="syncState">—</span></p>
+  </div>
+  <div class="spg" id="sp_users" hidden>
+    <label for="nuName" style="margin-top:4px">New user name</label>
+    <input type="text" id="nuName" autocomplete="off" maxlength="40">
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="nuAdd">Create user</button></div>
+    <div class="newkey" id="nuKey" hidden></div>
+    <div id="uList" style="margin-top:18px"></div>
   </div>
   <div class="spg" id="sp_look" hidden>
     <label style="margin-top:4px">Theme</label>
@@ -515,8 +524,8 @@ document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,sele
 
 /* ---------- cards tab: categories -> words ---------- */
 let openCat=null,tab='study',catEdit=false;
-const SPN={sync:'Sync',look:'Appearance',iv:'Review (FSRS)',voice:'Pronunciation'};let spOpen=null;
-function openSp(k){spOpen=k||null;$('#setHome').hidden=!!spOpen;document.querySelectorAll('.spg').forEach(g=>g.hidden=g.id!=='sp_'+spOpen);renderHeader();toTop()}
+const SPN={users:'Users',sync:'Sync',look:'Appearance',iv:'Review (FSRS)',voice:'Pronunciation'};let spOpen=null;
+function openSp(k){spOpen=k||null;if(spOpen==='users')loadUsers();$('#setHome').hidden=!!spOpen;document.querySelectorAll('.spg').forEach(g=>g.hidden=g.id!=='sp_'+spOpen);renderHeader();toTop()}
 $('#setHome').addEventListener('click',e=>{const b=e.target.closest('[data-sp]');if(b)openSp(b.dataset.sp)});
 function renderHeader(){
  $('#title').textContent={study:studyOpen?(studyCat||'All categories'):'Study',add:'Add',cards:openCat||'Cards',set:spOpen?SPN[spOpen]:'Settings'}[tab];
@@ -961,7 +970,37 @@ async function sync(manual){
   syncState('Sync interrupted: '+String(e.message||e).slice(0,110)+' — continuing')}
  finally{syncing=false;
   if(retry)setTimeout(sync,retry);else if(syncAgain){syncAgain=false;setTimeout(sync,500)}}}
-$('#saveKey').onclick=()=>{localStorage.appKey=$('#key').value.trim();localStorage.since=0;localStorage.lastPush=0;lset('pushPlan',null);lset('pullCur',null);sync(true)};
+/* ---------- accounts: admin creates users, each key = separate deck ---------- */
+const apiJ=async(path,key,opt={})=>{const r=await fetch(path,{...opt,headers:{'content-type':'application/json','x-app-key':key||KEY()}});
+ let j={};try{j=await r.json()}catch{}if(r.status===401)throw Object.assign(new Error('Wrong access key'),{code:401});
+ if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j};
+const showUsersRow=a=>{$('#usersRow').hidden=!a};
+async function refreshMe(){try{const m=await apiJ('/api/me');localStorage.uid=m.uid;localStorage.isAdmin=m.admin?'1':'';showUsersRow(m.admin)}catch(e){if(e.code===401)showUsersRow(false)}}
+showUsersRow(localStorage.isAdmin==='1');
+const clearCards=()=>new Promise(r=>{const t=db.transaction('cards','readwrite');t.objectStore('cards').clear();t.oncomplete=()=>r()});
+$('#saveKey').onclick=async()=>{const k=$('#key').value.trim();if(!k){toast('Enter the access key');return}
+ let me;try{me=await apiJ('/api/me',k)}catch(e){toast(e.code===401?'Wrong access key':'Could not check the key: '+e.message,4000);return}
+ const prev=localStorage.uid||(localStorage.appKey?'admin':'');
+ if(prev&&prev!==me.uid&&(await getAll()).length){
+  if(!confirm('This key belongs to a different account ('+me.name+'). The cards stored on this device will be removed from this device so they are not mixed into that account. Continue?'))return;
+  await clearCards()}
+ localStorage.appKey=k;localStorage.uid=me.uid;localStorage.isAdmin=me.admin?'1':'';showUsersRow(me.admin);
+ localStorage.since=0;localStorage.lastPush=0;lset('pushPlan',null);lset('pullCur',null);await refresh();sync(true)};
+function showNewKey(name,key,verb){const b=$('#nuKey');b.hidden=false;
+ b.innerHTML=`<b>${esc(name)}</b> — ${verb}. Send this key to the user now; it is shown only once.<code>${esc(key)}</code><button class="btn sm" id="nuCopy">Copy key</button>`;
+ $('#nuCopy').onclick=async()=>{try{await navigator.clipboard.writeText(key);toast('Copied')}catch{toast('Select the key and copy it')}}}
+async function loadUsers(){const box=$('#uList');box.textContent='…';
+ try{const {users}=await apiJ('/api/admin/users');
+  box.innerHTML=users.length?users.map(u=>`<div class="urow"><div class="nm"><b>${esc(u.name)}</b><small>${u.cards} cards · ${new Date(u.created_at).toLocaleDateString('en-US')}</small></div><button class="btn sm" data-ur="${u.id}" data-n="${esc(u.name)}">New key</button><button class="btn sm" data-ud="${u.id}" data-n="${esc(u.name)}">Delete</button></div>`).join(''):'<p class="pron">No users yet.</p>'}
+ catch(e){box.textContent='Could not load users: '+e.message}}
+$('#nuAdd').onclick=async()=>{const name=$('#nuName').value.trim();if(!name){toast('Enter a name');return}
+ try{const u=await apiJ('/api/admin/users',null,{method:'POST',body:JSON.stringify({name})});$('#nuName').value='';showNewKey(u.name,u.key,'user created');loadUsers()}catch(e){toast(e.message,4000)}};
+$('#uList').addEventListener('click',async e=>{const r=e.target.closest('[data-ur]'),d=e.target.closest('[data-ud]');
+ try{if(r){if(!confirm('Make a new key for "'+r.dataset.n+'"? The old key stops working immediately.'))return;
+   const u=await apiJ('/api/admin/reset',null,{method:'POST',body:JSON.stringify({id:r.dataset.ur})});showNewKey(r.dataset.n,u.key,'new key')}
+  else if(d){if(!confirm('Delete "'+d.dataset.n+'" and all of their cards? This cannot be undone.'))return;
+   await apiJ('/api/admin/delete',null,{method:'POST',body:JSON.stringify({id:d.dataset.ud})});$('#nuKey').hidden=true;loadUsers()}}
+ catch(err){toast(err.message,4000)}});
 $('#syncNow').onclick=()=>sync(true);
 addEventListener('online',()=>{sync()});
 addEventListener('focus',()=>{sync()});
@@ -1018,7 +1057,7 @@ document.addEventListener('touchend',e=>{if(!sOk)return;sOk=false;const t=e.chan
 load(LIB.fsrs).then(()=>{recs=null;renderIntervals();if(!$('#study').hidden)renderStudy()}).catch(()=>{});
 (async()=>{await open();$('#key').value=KEY();await refresh();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
- if(!KEY()){go('set');openSp('sync')}else sync()
+ if(!KEY()){go('set');openSp('sync')}else{sync();refreshMe()}
  setInterval(()=>{if(!shown&&tab==='study'){renderChips();renderStudy()}},60000)})();
 </script>
 </body>
