@@ -262,13 +262,23 @@ async function initDb(env) {
   ready = true;
 }
 
+// generates the card content with AI and stores it (only if nothing newer was saved meanwhile)
+async function fillCard(env, uid, card) {
+  const r = await generate(env, card.word);
+  if (r.error) return r;
+  const t = Math.max(Date.now(), card.updatedAt + 1);
+  const done = { ...card, status: "ready", data: r.data, updatedAt: t };
+  await env.DB.prepare(UPSERT).bind(uid, card.id, JSON.stringify(done), t, t).run();
+  return r;
+}
+
 const UPSERT =
   "INSERT INTO ucards (uid,id,data,updated_at,synced_at) VALUES (?,?,?,?,?) " +
   "ON CONFLICT(uid,id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at, synced_at=excluded.synced_at " +
   "WHERE excluded.updated_at > ucards.updated_at";
 
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(req);
     let me;
@@ -312,19 +322,23 @@ export default {
       const id = word.toLowerCase();
       const row = await env.DB.prepare("SELECT data FROM ucards WHERE uid=? AND id=?").bind(uid, id).first();
       if (row && !JSON.parse(row.data).deleted) return json({ ok: true, exists: true, word });
-      const r = await generate(env, word);
       const now = Date.now();
-      // If AI fails (e.g. daily quota used up) the word is still saved as "pending";
-      // the app generates it automatically the next time it syncs.
+      // Saved at once as "pending" and the answer is sent immediately; the card is generated in the
+      // background (ctx.waitUntil). If that fails or takes too long, the app generates it on its next sync.
+      // Send {"word": "...", "wait": true} to get the old behaviour (wait for the translation).
       const card = {
-        id, word, cat: "General", status: r.error ? "pending" : "ready",
+        id, word, cat: "General", status: "pending",
         due: now, interval: 0, reps: 0, createdAt: now, updatedAt: now,
       };
-      if (!r.error) card.data = r.data;
       await env.DB.prepare(UPSERT).bind(uid, id, JSON.stringify(card), now, now).run();
-      if (r.error)
-        return json({ ok: true, pending: true, word, message: "ذخیره شد، کارت بعداً ساخته می‌شود", reason: r.error.slice(0, 120) });
-      return json({ ok: true, word, en: r.data.en, fa: r.data.fa, message: r.data.fa });
+      if (body.wait) {
+        const r = await fillCard(env, uid, card);
+        if (r.error)
+          return json({ ok: true, pending: true, word, message: "ذخیره شد، کارت بعداً ساخته می‌شود", reason: r.error.slice(0, 120) });
+        return json({ ok: true, word, en: r.data.en, fa: r.data.fa, message: r.data.fa });
+      }
+      ctx.waitUntil(fillCard(env, uid, card).catch(() => {}));
+      return json({ ok: true, pending: true, word, message: "✓ " + word });
     }
 
     if (url.pathname === "/api/sync" && req.method === "POST") {
