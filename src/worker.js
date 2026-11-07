@@ -160,6 +160,17 @@ async function authenticate(env, req) {
   return row ? { uid: row.id, admin: false, name: row.name } : null;
 }
 
+// A key typed by the admin must be 6-64 chars and must not equal the admin key.
+// (A key that is empty means: make a random one.)
+function pickKey(env, raw) {
+  const k = String(raw ?? "").trim();
+  if (!k) return { key: rand(16) };
+  if (k.length < 6 || k.length > 64) return { error: "key must be 6 to 64 characters" };
+  if (safeEq(k, env.APP_KEY)) return { error: "this key is not allowed" };
+  return { key: k };
+}
+const isDup = (e) => /UNIQUE/i.test(String(e && e.message));
+
 async function adminApi(env, url, req) {
   const p = url.pathname, body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   if (p === "/api/admin/users" && req.method === "GET") {
@@ -173,14 +184,29 @@ async function adminApi(env, url, req) {
     if (!name) return json({ error: "name required" }, 400);
     const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
     if (n.n >= 200) return json({ error: "too many users" }, 400);
-    const id = rand(4), key = rand(16);
-    await env.DB.prepare("INSERT INTO users (id,name,key_hash,created_at) VALUES (?,?,?,?)")
-      .bind(id, name, await sha256(key), Date.now()).run();
+    const pk = pickKey(env, body.key);
+    if (pk.error) return json({ error: pk.error }, 400);
+    const id = rand(4), key = pk.key;
+    try {
+      await env.DB.prepare("INSERT INTO users (id,name,key_hash,created_at) VALUES (?,?,?,?)")
+        .bind(id, name, await sha256(key), Date.now()).run();
+    } catch (e) {
+      if (isDup(e)) return json({ error: "this key is already used, choose another" }, 400);
+      throw e;
+    }
     return json({ id, name, key });
   }
   if (p === "/api/admin/reset" && req.method === "POST") {
-    const key = rand(16);
-    const r = await env.DB.prepare("UPDATE users SET key_hash=? WHERE id=?").bind(await sha256(key), String(body.id || "")).run();
+    const pk = pickKey(env, body.key);
+    if (pk.error) return json({ error: pk.error }, 400);
+    const key = pk.key;
+    let r;
+    try {
+      r = await env.DB.prepare("UPDATE users SET key_hash=? WHERE id=?").bind(await sha256(key), String(body.id || "")).run();
+    } catch (e) {
+      if (isDup(e)) return json({ error: "this key is already used, choose another" }, 400);
+      throw e;
+    }
     return r.meta.changes ? json({ id: body.id, key }) : json({ error: "no such user" }, 404);
   }
   if (p === "/api/admin/delete" && req.method === "POST") {
