@@ -551,9 +551,10 @@ function renderHeader(){
  $('#back').style.visibility=((tab==='study'&&studyOpen)||(tab==='cards'&&openCat)||(tab==='set'&&spOpen))?'visible':'hidden';
  document.body.classList.toggle('studying',tab==='study'&&studyOpen)}
 let selMode=false,sel=new Set();
+const isSkip=c=>!!c.skipped&&c.due>Date.now(),SK=()=>localStorage.showSkipped==='1'; // skipped cards are hidden in the Cards tab unless switched on in the menu
 function visible(){const q=$('#q').value.trim().toLowerCase();
  const ok=c=>!q||c.word.toLowerCase().includes(q)||(c.data?.fa||'').includes(q)||(c.data?.en||'').toLowerCase().includes(q);
- const l=cards.filter(c=>(!openCat||inCat(c,openCat))&&ok(c));return openCat?sortCat(l,openCat):l.sort((a,b)=>b.createdAt-a.createdAt)}
+ const l=cards.filter(c=>(!openCat||inCat(c,openCat))&&(SK()||!isSkip(c))&&ok(c));return openCat?sortCat(l,openCat):l.sort((a,b)=>b.createdAt-a.createdAt)}
 function exitSel(){selMode=false;sel.clear();renderList()}
 function renderSelbar(){const b=$('#selbar');if(!selMode||tab!=='cards'){b.style.display='none';return}
  const n=sel.size,vis=visible(),nr=[...sel].filter(id=>{const c=cards.find(x=>x.id===id);return c&&c.status!=='ready'}).length;
@@ -573,7 +574,8 @@ function renderList(){
  if(!flat){selMode=false;sel.clear()}
  let h='';
  if(openCat){const cs=cards.filter(c=>inCat(c,openCat));
-  h+=`<div class="pron" style="margin:8px 4px">${cs.length} card${cs.length===1?'':'s'} · ${cs.filter(isDue).length} due</div>`}
+  const hid=SK()?0:cs.filter(isSkip).length;
+  h+=`<div class="pron" style="margin:8px 4px">${cs.length} card${cs.length===1?'':'s'} · ${cs.filter(isDue).length} due${hid?` · ${hid} skipped hidden`:''}</div>`}
  if(flat){const nr=openCat?cards.filter(c=>inCat(c,openCat)&&c.status!=='ready').length:0;
   const cs0=openCat?cards.filter(c=>inCat(c,openCat)):[];
   h+=`<div class="catline">${ib('data-selmode',selMode?'done':'select',selMode?'Done':'Select',selMode?'on':'')}`
@@ -725,6 +727,7 @@ $('#more').onclick=()=>{const a=[];
    ...(nr&&!genBusy?[['Generate remaining',()=>requestGen(cs0),0,'gen']]:[]),
    ...(isF?[]:[['Delete all cards',deleteCat,1,'del']]))}
  if(tab==='cards'&&!openCat&&cards.length)a.push(['Reorder & pin',()=>{catEdit=true;renderList()},0,'sort'],['Export all to Excel',exportAll,0,'export']);
+ if(tab==='cards'&&(SK()||cards.some(isSkip)))a.push([SK()?'Hide skipped cards':'Show skipped cards',()=>{try{localStorage.showSkipped=SK()?'0':'1'}catch{}renderList();toast(SK()?'Skipped cards are shown':'Skipped cards are hidden',1800)},0,'select']);
  if(genBusy)a.push(['Stop generating',stopGen,1,'stop']);
  a.push(['Sync now',()=>sync(true),0,'sync',a.length],['Switch theme',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'),0,'theme']);
  showSheet(a,'',true)};
