@@ -433,11 +433,18 @@ function dueList(){const d=cards.filter(c=>isDue(c)&&inStudy(c));
 const LAYS=()=>{try{return JSON.parse(localStorage.catLayout||'{}')}catch{return{}}};
 const catLayout=n=>LAYS()[n]||null;
 function setCatLayout(n,v){const m=LAYS();if(v)m[n]=v;else delete m[n];localStorage.catLayout=JSON.stringify(m)}
-const fieldVal=(c,n)=>((c.fields||[]).find(x=>x.n===n)||{}).v||'';
-function layoutOf(c){const L=catLayout(catOf(c));if(!L||!c.fields||!c.fields.length)return null;
- const f=L.front||[],b=L.back||[],o=L.order||[];return c.rev?{front:b,back:f,order:o}:{front:f,back:b,order:o}}
+/* fields of a card: the imported columns, or - for AI-generated cards - the parts of the generated card */
+function fieldsOf(c){if(c.fields&&c.fields.length)return c.fields;
+ if(c.status!=='ready'||!c.data)return[];const d=c.data;
+ const ex=(d.examples||[]).map(e=>[e.en,e.fa].filter(Boolean).join('\n')).filter(Boolean).join('\n\n');
+ return[['Word',c.word],['English',d.en],['Part of speech',d.pos],['IPA',d.ipa],['Pronunciation',d.fa_pron],['Persian meaning',d.fa],['Examples',ex],['Note',d.note]].map(([n,v])=>({n,v:String(v||'')}))}
+const fieldVal=(c,n)=>(fieldsOf(c).find(x=>x.n===n)||{}).v||'';
+function layoutOf(c){const L=catLayout(catOf(c));if(!L)return null;const fl=fieldsOf(c);if(!fl.length)return null;
+ const f=L.front||[],b=L.back||[],o=L.order||[];
+ if(![...f,...b].some(n=>fl.some(x=>x.n===n)))return null; // layout made for other fields (e.g. imported columns)
+ return c.rev?{front:b,back:f,order:o}:{front:f,back:b,order:o}}
 function fieldsHtml(c,L,all){
- const ord=(L.order||[]),names=all?c.fields.map(x=>x.n).sort((a,b)=>{const i=ord.indexOf(a),j=ord.indexOf(b);return (i<0?1e6:i)-(j<0?1e6:j)}):L.back,d=c.data||{};
+ const ord=(L.order||[]),names=all?fieldsOf(c).map(x=>x.n).sort((a,b)=>{const i=ord.indexOf(a),j=ord.indexOf(b);return (i<0?1e6:i)-(j<0?1e6:j)}):L.back,d=c.data||{};
  const say=[...L.front,...L.back].map(n=>fieldVal(c,n).split('\n')[0]).find(t=>t&&!ARA.test(t))||d.en||'';
  return (say?`<div class="row"><button class="btn sm" data-say="${esc(say)}" aria-label="Play pronunciation">🔊</button></div>`:'')
   +names.map(n=>{const v=fieldVal(c,n);return v?`<div class="fld"><small>${esc(n)}</small><div dir="auto">${esc(v)}</div></div>`:''}).join('')}
@@ -579,7 +586,7 @@ function renderList(){
  if(flat){const nr=openCat?cards.filter(c=>inCat(c,openCat)&&c.status!=='ready').length:0;
   const cs0=openCat?cards.filter(c=>inCat(c,openCat)):[];
   h+=`<div class="catline">${ib('data-selmode',selMode?'done':'select',selMode?'Done':'Select',selMode?'on':'')}`
-  +(openCat&&!selMode?ib('data-pincat','pin',isPinned(openCat)?'Unpin category':'Pin category',isPinned(openCat)?'on':'')+(openCat===FAVN?'':ib('data-renamecat','rename','Rename'))+ib('data-resetcat','reset','Reset review')+ib('data-sortcat','sort','Sort')+(openCat!==FAVN&&cs0.some(c=>c.fields&&c.fields.length)?ib('data-layoutcat','layout','Front / back fields',catLayout(openCat)?'on':''):'')
+  +(openCat&&!selMode?ib('data-pincat','pin',isPinned(openCat)?'Unpin category':'Pin category',isPinned(openCat)?'on':'')+(openCat===FAVN?'':ib('data-renamecat','rename','Rename'))+ib('data-resetcat','reset','Reset review')+ib('data-sortcat','sort','Sort')+(openCat!==FAVN&&cs0.some(c=>fieldsOf(c).length)?ib('data-layoutcat','layout','Front / back fields',catLayout(openCat)?'on':''):'')
    +(()=>{const t=cards.filter(c=>inCat(c,openCat)&&c.status==='ready'),a=t.length&&t.every(c=>c.rev);return t.length?ib('data-revcat','flip',a?'Restore normal order':'Reverse all cards',a?'on':''):''})()
    +ib('data-exportcat','export','Export to Excel')+(nr?ib('data-gencat','gen','Generate remaining','',nr):'')+(genBusy?ib('data-stopgen','stop','Stop generating','stopg'):'')+(openCat===FAVN?'':ib('data-delcat','del','Delete all','danger')):'')+'</div>'}
  if(!flat&&allCats().length)h+=`<div class="catline">${ib('data-catedit',catEdit?'done':'sort',catEdit?'Done':'Reorder & pin',catEdit?'on':'')}${catEdit?'':ib('data-exportall','export','Export all to Excel')}</div>`;
@@ -618,9 +625,9 @@ function openSort(cat){sortTarget=cat||openCat;const o=catSort(sortTarget);
  <p class="pron" style="font-size:13px;margin-top:14px">Applies to this category's list and to the order new cards are introduced in Study.</p>`;
  $('#sk').value=o.k;$('#sd').value=o.d;if(!$('#dlg').open)$('#dlg').showModal()}
 function openLayout(cat){const CT=cat||openCat;
- const cs=cards.filter(c=>inCat(c,CT)&&c.fields&&c.fields.length);
- let names=[];cs.forEach(c=>c.fields.forEach(x=>{if(!names.includes(x.n))names.push(x.n)}));
- if(!names.length)return toast('This category has no imported fields');
+ const cs=cards.filter(c=>inCat(c,CT)&&fieldsOf(c).length);
+ let names=[];cs.forEach(c=>fieldsOf(c).forEach(x=>{if(!names.includes(x.n))names.push(x.n)}));
+ if(!names.length)return toast('No generated cards in this category yet');
  const L=catLayout(CT)||{front:[names[0]],back:names.slice(1)};
  if(L.order&&L.order.length){const o=L.order;names=[...o.filter(n=>names.includes(n)),...names.filter(n=>!o.includes(n))]}
  const F=new Set(L.front||[]),B=new Set(L.back||[]);
@@ -712,7 +719,7 @@ $('#more').onclick=()=>{const a=[];
   a.push([c.fav?'Remove from favorites':'Add to favorites',()=>toggleFav(c),0,'star'])}
  if(tab==='study'&&studyOpen){
   if(undoStack.length)a.push(['Undo last answer ('+undoStack.length+')',undoLast,0,'reset']);
-  if(studyCat&&cards.some(c=>inCat(c,studyCat)&&c.fields&&c.fields.length))a.push(['Front / back fields',()=>openLayout(studyCat),0,'layout']);
+  if(studyCat&&cards.some(c=>inCat(c,studyCat)&&fieldsOf(c).length))a.push(['Front / back fields',()=>openLayout(studyCat),0,'layout']);
   if(studyCat)a.push(['Sort',()=>openSort(studyCat),0,'sort']);
   const rt=cards.filter(c=>inStudy(c)&&c.status==='ready');
   if(rt.length)a.push([rt.every(c=>c.rev)?'Restore normal order':'Reverse all cards',()=>reverseCat(inStudy),0,'flip'])}
@@ -721,7 +728,7 @@ $('#more').onclick=()=>{const a=[];
    [isPinned(openCat)?'Unpin category':'Pin category',()=>togglePin(openCat),0,'pin'],
    ...(isF?[]:[['Rename category',renameCat,0,'rename']]),
    ['Reset review',resetCat,0,'reset'],['Sort',()=>openSort(),0,'sort'],
-   ...(!isF&&cs0.some(c=>c.fields&&c.fields.length)?[['Front / back fields',()=>openLayout(),0,'layout']]:[]),
+   ...(!isF&&cs0.some(c=>fieldsOf(c).length)?[['Front / back fields',()=>openLayout(),0,'layout']]:[]),
    ...(rt.length?[[rt.every(c=>c.rev)?'Restore normal order':'Reverse all cards',()=>reverseCat(),0,'flip']]:[]),
    ['Export to Excel',()=>exportCat(openCat),0,'export'],
    ...(nr&&!genBusy?[['Generate remaining',()=>requestGen(cs0),0,'gen']]:[]),
