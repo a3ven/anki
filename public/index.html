@@ -206,6 +206,8 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
   <div class="spg" id="sp_users" hidden>
     <label for="nuName" style="margin-top:4px">New user name</label>
     <input type="text" id="nuName" autocomplete="off" maxlength="40">
+    <label for="nuKeyIn" style="margin-top:12px">Key (optional: leave empty for a random one, min 6 characters)</label>
+    <input type="text" id="nuKeyIn" autocomplete="off" maxlength="64" style="direction:ltr">
     <div class="row" style="margin-top:12px"><button class="btn pri" id="nuAdd">Create user</button></div>
     <div class="newkey" id="nuKey" hidden></div>
     <div id="uList" style="margin-top:18px"></div>
@@ -987,17 +989,18 @@ $('#saveKey').onclick=async()=>{const k=$('#key').value.trim();if(!k){toast('Ent
  localStorage.appKey=k;localStorage.uid=me.uid;localStorage.isAdmin=me.admin?'1':'';showUsersRow(me.admin);
  localStorage.since=0;localStorage.lastPush=0;lset('pushPlan',null);lset('pullCur',null);await refresh();sync(true)};
 function showNewKey(name,key,verb){const b=$('#nuKey');b.hidden=false;
- b.innerHTML=`<b>${esc(name)}</b> — ${verb}. Send this key to the user now; it is shown only once.<code>${esc(key)}</code><button class="btn sm" id="nuCopy">Copy key</button>`;
+ b.innerHTML=`<b>${esc(name)}</b> — ${verb}. Send this key to the user now; it is shown only this once.<code>${esc(key)}</code><button class="btn sm" id="nuCopy">Copy key</button>`;
  $('#nuCopy').onclick=async()=>{try{await navigator.clipboard.writeText(key);toast('Copied')}catch{toast('Select the key and copy it')}}}
 async function loadUsers(){const box=$('#uList');box.textContent='…';
  try{const {users}=await apiJ('/api/admin/users');
   box.innerHTML=users.length?users.map(u=>`<div class="urow"><div class="nm"><b>${esc(u.name)}</b><small>${u.cards} cards · ${new Date(u.created_at).toLocaleDateString('en-US')}</small></div><button class="btn sm" data-ur="${u.id}" data-n="${esc(u.name)}">New key</button><button class="btn sm" data-ud="${u.id}" data-n="${esc(u.name)}">Delete</button></div>`).join(''):'<p class="pron">No users yet.</p>'}
  catch(e){box.textContent='Could not load users: '+e.message}}
 $('#nuAdd').onclick=async()=>{const name=$('#nuName').value.trim();if(!name){toast('Enter a name');return}
- try{const u=await apiJ('/api/admin/users',null,{method:'POST',body:JSON.stringify({name})});$('#nuName').value='';showNewKey(u.name,u.key,'user created');loadUsers()}catch(e){toast(e.message,4000)}};
+ try{const u=await apiJ('/api/admin/users',null,{method:'POST',body:JSON.stringify({name,key:$('#nuKeyIn').value.trim()})});$('#nuName').value='';$('#nuKeyIn').value='';showNewKey(u.name,u.key,'user created');loadUsers()}catch(e){toast(e.message,4000)}};
 $('#uList').addEventListener('click',async e=>{const r=e.target.closest('[data-ur]'),d=e.target.closest('[data-ud]');
- try{if(r){if(!confirm('Make a new key for "'+r.dataset.n+'"? The old key stops working immediately.'))return;
-   const u=await apiJ('/api/admin/reset',null,{method:'POST',body:JSON.stringify({id:r.dataset.ur})});showNewKey(r.dataset.n,u.key,'new key')}
+ try{if(r){const typed=prompt('New key for "'+r.dataset.n+'" (min 6 characters). Leave empty for a random key. The old key stops working immediately.','');
+   if(typed===null)return;
+   const u=await apiJ('/api/admin/reset',null,{method:'POST',body:JSON.stringify({id:r.dataset.ur,key:typed.trim()})});showNewKey(r.dataset.n,u.key,'new key')}
   else if(d){if(!confirm('Delete "'+d.dataset.n+'" and all of their cards? This cannot be undone.'))return;
    await apiJ('/api/admin/delete',null,{method:'POST',body:JSON.stringify({id:d.dataset.ud})});$('#nuKey').hidden=true;loadUsers()}}
  catch(err){toast(err.message,4000)}});
