@@ -722,7 +722,7 @@ $('#more').onclick=()=>{const a=[];
 
 /* ---------- card detail + edit ---------- */
 function openDetail(id){editFromStudy=false;const c=cards.find(x=>x.id===id);if(!c)return;
- const opts=catsOrd().map(n=>`<option ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('')+'<option value="__new">+ New category…</option>';
+ const opts=catsOrd().map(n=>`<option value="${esc(n)}" ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('')+'<option value="__new">+ New category…</option>';
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:12px"><b class="big" dir="auto">${esc(c.word)}</b><button class="x" data-close aria-label="Close">✕</button></div>`
   +(c.status==='ready'?backHtml(c,true):`<p class="pron">${c.status==='error'?'Card generation failed. You can fill it in manually with Edit.'+(c.err?`<br><small dir="ltr">${esc(c.err)}</small>`:''):'Not generated yet.'}</p>`)
   +(c.status==='ready'?`<label class="tg" for="rv"><span>Reverse this card<small>Show the meaning on the front, the word on the back</small></span><input type="checkbox" class="sw" id="rv" data-id="${esc(c.id)}"${c.rev?' checked':''}></label>`:'')
@@ -815,10 +815,10 @@ async function addWords(ws,cat){
  toast(`${n} new card${n===1?'':'s'} added to "${cat}"`+(r?` · ${r} with meanings from the file`:'')+(n-r?` · ${n-r} to generate`:''),4000);scheduleSync()}
 function fillCatSelect(){const sel=$('#catSel'),v=sel.value||localStorage.lastCat||'General';
  const l=[...new Set([...(cats().includes('General')?[]:['General']),...catsOrd()])];
- sel.innerHTML=l.map(c=>`<option>${esc(c)}</option>`).join('')+'<option value="__new">+ New category…</option>';
+ sel.innerHTML=l.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')+'<option value="__new">+ New category…</option>';
  sel.value=(v==='__new'||l.includes(v))?v:l[0];$('#newCat').hidden=sel.value!=='__new'}
 $('#catSel').onchange=()=>{$('#newCat').hidden=$('#catSel').value!=='__new';if(!$('#newCat').hidden)$('#newCat').focus()};
-function pickedCat(){const sel=$('#catSel');return sel.value==='__new'?($('#newCat').value.trim()||'General'):sel.value}
+function pickedCat(){const sel=$('#catSel');return sel.value==='__new'?matchCat($('#newCat').value):sel.value}
 $('#addBtn').onclick=()=>{const v=$('#words').value.split('\n');$('#words').value='';addWords(v,pickedCat())};
 const load=src=>new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();
  const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load the import library (are you offline?)'));document.head.appendChild(s)});
@@ -840,15 +840,17 @@ function noteToCard(f,names){
  const m=meaning.replace(/\n/g,'، '),fPer=ARA.test(w),mPer=ARA.test(m);
  const en=fPer&&!mPer?m:w,fa=fPer&&!mPer?w:m;
  return{w,fields,d:{en,fa,pos:'',ipa,fa_pron:'',examples:ex,note:other.join('\n')}}}
+const normCat=n=>String(n||'').normalize('NFKC').replace(/[\u200b\u200c\u200d]/g,'').replace(/ي/g,'ی').replace(/ك/g,'ک').replace(/\s+/g,' ').trim().toLowerCase();
+const matchCat=n=>{n=String(n||'').trim();if(!n)return 'General';const l=catsOrd();return l.includes(n)?n:(l.find(c=>normCat(c)===normCat(n))||n)};
 function askCat(n,def){return new Promise(res=>{const d=$('#imp');
  $('#impBody').innerHTML=`<b class="big">Import ${n} word${n===1?'':'s'}</b>
  <label for="impSel">Add to category</label>
- <select id="impSel"><option value="__new">+ New category</option>${catsOrd().map(c=>`<option>${esc(c)}</option>`).join('')}</select>
+ <select id="impSel"><option value="__new">+ New category</option>${catsOrd().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>
  <input type="text" id="impName" value="${esc(def)}" placeholder="Category name" style="margin-top:8px">
  <div class="row" style="margin-top:18px"><button class="btn pri" id="impOk">Import</button><button class="btn" id="impNo">Cancel</button></div>`;
  $('#impSel').onchange=()=>{$('#impName').hidden=$('#impSel').value!=='__new'};
  const done=v=>{d.onclose=null;d.close();res(v)};
- $('#impOk').onclick=()=>done($('#impSel').value==='__new'?($('#impName').value.trim()||'General'):$('#impSel').value);
+ $('#impOk').onclick=()=>done($('#impSel').value==='__new'?matchCat($('#impName').value):$('#impSel').value);
  $('#impNo').onclick=()=>done(null);
  d.onclose=()=>res(null);d.showModal()})}
 async function importFile(f){
