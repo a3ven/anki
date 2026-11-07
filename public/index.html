@@ -60,6 +60,13 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 #sdock.on{display:block}
 #sdock .show,#sdock .rate{margin-top:0}
 .deck small{color:var(--mute);font-size:14px}
+.deck span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.deck .dn,.dkh .dn{flex:none;width:50px;text-align:center;font-variant-numeric:tabular-nums}
+.deck .dn{font-size:16px}.deck .dn.z{opacity:.45}.deck .dn.d{color:var(--acc);font-weight:700}
+.srow.deck{gap:0}.deck span{margin-inline-end:8px}
+.deck .chev,.dkh .cv{flex:none;width:20px;padding:0;text-align:center}
+.dkh{display:flex;align-items:center;padding:0 16px 6px;color:var(--mute);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.03em}
+.dkh .nm{flex:1}
 .rate{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:14px}
 .rate button{border:0;background:var(--surf);border-radius:20px;padding:12px 2px;font:inherit;font-size:14px;font-weight:700;cursor:pointer}
 .rate small{display:block;font-weight:500;color:var(--mute);font-size:12px}
@@ -450,9 +457,11 @@ function renderChips(){const l=allCats();$('#chips').innerHTML='';
  if(studyCat&&!l.includes(studyCat)){setStudyCat('');if(studyOpen){studyOpen=false;cur=null;shown=false;recs=null;renderHeader()}}}
 function renderDecks(){const el=$('#sbody'),l=orderedCats();
  if(!cards.length){el.innerHTML='<div class="empty">No cards yet.<br>Add some words in the Add tab.</div>';return}
- const row=(n,label)=>{const cs=cards.filter(c=>!n||inCat(c,n)),d=cs.filter(isDue).length;
-  return `<button class="srow deck" data-deck="${esc(n)}"><span dir="auto">${esc(label)}${n&&isPinned(n)?PINI:''}</span><small>${d?`<b style="color:var(--acc)">${d} due</b> · `:''}${cs.length}</small><i class="chev">›</i></button>`};
- el.innerHTML=`<div class="sgrp">${(l.length>1?row('','All categories'):'')+l.map(n=>row(n,n)).join('')}</div>`}
+ const nw=Date.now(),isSk=c=>c.skipped&&c.due>nw;
+ const cell=(v,cls)=>`<small class="dn ${v?cls:'z'}">${v||'–'}</small>`;
+ const row=(n,label)=>{const cs=cards.filter(c=>!n||inCat(c,n)),d=cs.filter(isDue).length,k=cs.filter(isSk).length;
+  return `<button class="srow deck" data-deck="${esc(n)}"><span dir="auto">${esc(label)}${n&&isPinned(n)?PINI:''}</span>${cell(d,'d')}${cell(k,'')}<small class="dn">${cs.length}</small><i class="chev">›</i></button>`};
+ el.innerHTML=`<div class="dkh"><span class="nm"></span><span class="dn">Due</span><span class="dn">Skipped</span><span class="dn">Total</span><span class="cv"></span></div><div class="sgrp">${(l.length>1?row('','All categories'):'')+l.map(n=>row(n,n)).join('')}</div>`}
 function openDeck(n){undoStack=[];setStudyCat(n);studyOpen=true;cur=null;shown=false;recs=null;renderHeader();renderStudy();window.scrollTo(0,0)}
 function closeDeck(){undoStack=[];studyOpen=false;cur=null;shown=false;recs=null;renderHeader();renderStudy();window.scrollTo(0,0)}
 function renderStudy(){
