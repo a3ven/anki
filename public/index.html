@@ -192,6 +192,7 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
     <button class="srow" data-sp="look"><svg class="i" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span>Appearance</span><i class="chev">›</i></button>
     <button class="srow" data-sp="iv"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Review (FSRS)</span><i class="chev">›</i></button>
     <button class="srow" data-sp="voice"><svg class="i" viewBox="0 0 24 24"><path d="M4 10v4h4l5 4V6L8 10z"/><path d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/></svg><span>Pronunciation</span><i class="chev">›</i></button>
+    <button class="srow" data-sp="backup"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg><span>Backup</span><i class="chev">›</i></button>
     <button class="srow" data-sp="users" id="usersRow" hidden><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg><span>Users</span><i class="chev">›</i></button>
   </div>
   <div class="spg" id="sp_sync" hidden>
@@ -202,6 +203,13 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
       <button class="btn" id="syncNow">Sync now</button>
     </div>
     <p class="pron" style="margin-top:12px"><span class="dot" id="dot"></span><span id="syncState">—</span></p>
+  </div>
+  <div class="spg" id="sp_backup" hidden>
+    <p class="pron" id="bkInfo" style="margin-top:4px"></p>
+    <div class="row" style="margin-top:12px"><button class="btn pri" id="bkSave">Download backup</button></div>
+    <label for="bkFile" style="margin-top:22px">Restore from a backup file</label>
+    <input type="file" id="bkFile" accept=".json,application/json">
+    <p class="pron" style="margin-top:12px">The backup is a file with all cards of this account on this device (including review progress, categories and order). Restoring never overwrites cards that are newer on this device.</p>
   </div>
   <div class="spg" id="sp_users" hidden>
     <label for="nuName" style="margin-top:4px">New user name</label>
@@ -526,8 +534,8 @@ document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea,sele
 
 /* ---------- cards tab: categories -> words ---------- */
 let openCat=null,tab='study',catEdit=false;
-const SPN={users:'Users',sync:'Sync',look:'Appearance',iv:'Review (FSRS)',voice:'Pronunciation'};let spOpen=null;
-function openSp(k){spOpen=k||null;if(spOpen==='users')loadUsers();$('#setHome').hidden=!!spOpen;document.querySelectorAll('.spg').forEach(g=>g.hidden=g.id!=='sp_'+spOpen);renderHeader();toTop()}
+const SPN={backup:'Backup',users:'Users',sync:'Sync',look:'Appearance',iv:'Review (FSRS)',voice:'Pronunciation'};let spOpen=null;
+function openSp(k){spOpen=k||null;if(spOpen==='users')loadUsers();if(spOpen==='backup')renderBackup();$('#setHome').hidden=!!spOpen;document.querySelectorAll('.spg').forEach(g=>g.hidden=g.id!=='sp_'+spOpen);renderHeader();toTop()}
 $('#setHome').addEventListener('click',e=>{const b=e.target.closest('[data-sp]');if(b)openSp(b.dataset.sp)});
 function renderHeader(){
  $('#title').textContent={study:studyOpen?(studyCat||'All categories'):'Study',add:'Add',cards:openCat||'Cards',set:spOpen?SPN[spOpen]:'Settings'}[tab];
@@ -714,7 +722,7 @@ $('#more').onclick=()=>{const a=[];
 
 /* ---------- card detail + edit ---------- */
 function openDetail(id){editFromStudy=false;const c=cards.find(x=>x.id===id);if(!c)return;
- const opts=catsOrd().map(n=>`<option ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('')+'<option value="__new">+ New category…</option>';
+ const opts=catsOrd().map(n=>`<option value="${esc(n)}" ${n===catOf(c)?'selected':''}>${esc(n)}</option>`).join('')+'<option value="__new">+ New category…</option>';
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:12px"><b class="big" dir="auto">${esc(c.word)}</b><button class="x" data-close aria-label="Close">✕</button></div>`
   +(c.status==='ready'?backHtml(c,true):`<p class="pron">${c.status==='error'?'Card generation failed. You can fill it in manually with Edit.'+(c.err?`<br><small dir="ltr">${esc(c.err)}</small>`:''):'Not generated yet.'}</p>`)
   +(c.status==='ready'?`<label class="tg" for="rv"><span>Reverse this card<small>Show the meaning on the front, the word on the back</small></span><input type="checkbox" class="sw" id="rv" data-id="${esc(c.id)}"${c.rev?' checked':''}></label>`:'')
@@ -807,10 +815,10 @@ async function addWords(ws,cat){
  toast(`${n} new card${n===1?'':'s'} added to "${cat}"`+(r?` · ${r} with meanings from the file`:'')+(n-r?` · ${n-r} to generate`:''),4000);scheduleSync()}
 function fillCatSelect(){const sel=$('#catSel'),v=sel.value||localStorage.lastCat||'General';
  const l=[...new Set([...(cats().includes('General')?[]:['General']),...catsOrd()])];
- sel.innerHTML=l.map(c=>`<option>${esc(c)}</option>`).join('')+'<option value="__new">+ New category…</option>';
+ sel.innerHTML=l.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')+'<option value="__new">+ New category…</option>';
  sel.value=(v==='__new'||l.includes(v))?v:l[0];$('#newCat').hidden=sel.value!=='__new'}
 $('#catSel').onchange=()=>{$('#newCat').hidden=$('#catSel').value!=='__new';if(!$('#newCat').hidden)$('#newCat').focus()};
-function pickedCat(){const sel=$('#catSel');return sel.value==='__new'?($('#newCat').value.trim()||'General'):sel.value}
+function pickedCat(){const sel=$('#catSel');return sel.value==='__new'?matchCat($('#newCat').value):sel.value}
 $('#addBtn').onclick=()=>{const v=$('#words').value.split('\n');$('#words').value='';addWords(v,pickedCat())};
 const load=src=>new Promise((res,rej)=>{if(document.querySelector(`script[src="${src}"]`))return res();
  const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load the import library (are you offline?)'));document.head.appendChild(s)});
@@ -832,15 +840,17 @@ function noteToCard(f,names){
  const m=meaning.replace(/\n/g,'، '),fPer=ARA.test(w),mPer=ARA.test(m);
  const en=fPer&&!mPer?m:w,fa=fPer&&!mPer?w:m;
  return{w,fields,d:{en,fa,pos:'',ipa,fa_pron:'',examples:ex,note:other.join('\n')}}}
+const normCat=n=>String(n||'').normalize('NFKC').replace(/[\u200b\u200c\u200d]/g,'').replace(/ي/g,'ی').replace(/ك/g,'ک').replace(/\s+/g,' ').trim().toLowerCase();
+const matchCat=n=>{n=String(n||'').trim();if(!n)return 'General';const l=catsOrd();return l.includes(n)?n:(l.find(c=>normCat(c)===normCat(n))||n)};
 function askCat(n,def){return new Promise(res=>{const d=$('#imp');
  $('#impBody').innerHTML=`<b class="big">Import ${n} word${n===1?'':'s'}</b>
  <label for="impSel">Add to category</label>
- <select id="impSel"><option value="__new">+ New category</option>${catsOrd().map(c=>`<option>${esc(c)}</option>`).join('')}</select>
+ <select id="impSel"><option value="__new">+ New category</option>${catsOrd().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>
  <input type="text" id="impName" value="${esc(def)}" placeholder="Category name" style="margin-top:8px">
  <div class="row" style="margin-top:18px"><button class="btn pri" id="impOk">Import</button><button class="btn" id="impNo">Cancel</button></div>`;
  $('#impSel').onchange=()=>{$('#impName').hidden=$('#impSel').value!=='__new'};
  const done=v=>{d.onclose=null;d.close();res(v)};
- $('#impOk').onclick=()=>done($('#impSel').value==='__new'?($('#impName').value.trim()||'General'):$('#impSel').value);
+ $('#impOk').onclick=()=>done($('#impSel').value==='__new'?matchCat($('#impName').value):$('#impSel').value);
  $('#impNo').onclick=()=>done(null);
  d.onclose=()=>res(null);d.showModal()})}
 async function importFile(f){
@@ -977,7 +987,7 @@ const apiJ=async(path,key,opt={})=>{const r=await fetch(path,{...opt,headers:{'c
  let j={};try{j=await r.json()}catch{}if(r.status===401)throw Object.assign(new Error('Wrong access key'),{code:401});
  if(!r.ok)throw new Error(j.error||'HTTP '+r.status);return j};
 const showUsersRow=a=>{$('#usersRow').hidden=!a};
-async function refreshMe(){try{const m=await apiJ('/api/me');localStorage.uid=m.uid;localStorage.isAdmin=m.admin?'1':'';showUsersRow(m.admin)}catch(e){if(e.code===401)showUsersRow(false)}}
+async function refreshMe(){try{const m=await apiJ('/api/me');localStorage.uid=m.uid;localStorage.uname=m.name;localStorage.isAdmin=m.admin?'1':'';showUsersRow(m.admin)}catch(e){if(e.code===401)showUsersRow(false)}}
 showUsersRow(localStorage.isAdmin==='1');
 const clearCards=()=>new Promise(r=>{const t=db.transaction('cards','readwrite');t.objectStore('cards').clear();t.oncomplete=()=>r()});
 $('#saveKey').onclick=async()=>{const k=$('#key').value.trim();if(!k){toast('Enter the access key');return}
@@ -985,8 +995,8 @@ $('#saveKey').onclick=async()=>{const k=$('#key').value.trim();if(!k){toast('Ent
  const prev=localStorage.uid||(localStorage.appKey?'admin':'');
  if(prev&&prev!==me.uid&&(await getAll()).length){
   if(!confirm('This key belongs to a different account ('+me.name+'). The cards stored on this device will be removed from this device so they are not mixed into that account. Continue?'))return;
-  await clearCards()}
- localStorage.appKey=k;localStorage.uid=me.uid;localStorage.isAdmin=me.admin?'1':'';showUsersRow(me.admin);
+  await clearCards();localStorage.removeItem('lastBackup')}
+ localStorage.appKey=k;localStorage.uid=me.uid;localStorage.uname=me.name;localStorage.isAdmin=me.admin?'1':'';showUsersRow(me.admin);
  localStorage.since=0;localStorage.lastPush=0;lset('pushPlan',null);lset('pullCur',null);await refresh();sync(true)};
 function showNewKey(name,key,verb){const b=$('#nuKey');b.hidden=false;
  b.innerHTML=`<b>${esc(name)}</b> — ${verb}. Send this key to the user now; it is shown only this once.<code>${esc(key)}</code><button class="btn sm" id="nuCopy">Copy key</button>`;
@@ -1004,6 +1014,33 @@ $('#uList').addEventListener('click',async e=>{const r=e.target.closest('[data-u
   else if(d){if(!confirm('Delete "'+d.dataset.n+'" and all of their cards? This cannot be undone.'))return;
    await apiJ('/api/admin/delete',null,{method:'POST',body:JSON.stringify({id:d.dataset.ud})});$('#nuKey').hidden=true;loadUsers()}}
  catch(err){toast(err.message,4000)}});
+/* ---------- local backup / restore (per account, on this device) ---------- */
+const BK_KEYS=['catPins','catOrder','catSort','catLayout','dr','steps','studyCat','lastCat'];
+async function renderBackup(){const n=(await getAll()).filter(c=>!c.deleted).length,t=+localStorage.lastBackup;
+ $('#bkInfo').textContent=`${n} cards on this device · last backup: ${t?new Date(t).toLocaleString('en-US'):'never'}`}
+async function makeBackup(){
+ const all=await getAll(),settings={};
+ BK_KEYS.forEach(k=>{const v=localStorage.getItem(k);if(v!=null)settings[k]=v});
+ const data={app:'flashcards-backup',version:1,createdAt:Date.now(),uid:localStorage.uid||'',name:localStorage.uname||'',settings,cards:all};
+ const name=`flashcards-${fileSafe(data.name||'backup')}-${new Date().toISOString().slice(0,10)}.json`;
+ const file=new File([JSON.stringify(data)],name,{type:'application/json'});
+ try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:name});
+   localStorage.lastBackup=Date.now();renderBackup();toast('Backup ready');return}}catch(e){if(e&&e.name==='AbortError')return}
+ const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(a.href),4000);localStorage.lastBackup=Date.now();renderBackup();toast('Backup downloaded')}
+async function restoreBackup(f){
+ let d;try{d=JSON.parse(await f.text())}catch{return toast('This is not a valid backup file',4000)}
+ if(!d||d.app!=='flashcards-backup'||!Array.isArray(d.cards))return toast('This is not a flashcards backup',4000);
+ const valid=d.cards.filter(c=>c&&typeof c.id==='string'&&c.id);
+ if(d.uid&&localStorage.uid&&d.uid!==localStorage.uid&&!confirm(`This backup belongs to another account (${d.name||d.uid}). Restore it into the current account anyway?`))return;
+ if(!confirm(`Restore ${valid.filter(c=>!c.deleted).length} cards from the backup made on ${new Date(d.createdAt||0).toLocaleDateString('en-US')}? Cards that are newer on this device are kept.`))return;
+ const cur=await getMany(valid.map(c=>c.id)),fresh=valid.filter((c,i)=>!cur[i]||(c.updatedAt||0)>(cur[i].updatedAt||0));
+ await putMany(fresh);
+ if(d.settings&&typeof d.settings==='object')BK_KEYS.forEach(k=>{if(typeof d.settings[k]==='string')try{localStorage.setItem(k,d.settings[k])}catch{}});
+ localStorage.since=0;localStorage.lastPush=0;lset('pushPlan',null);lset('pullCur',null); // let the next sync upload whatever the server lacks
+ await refresh();renderBackup();toast(`Restored ${fresh.length} cards`);if(KEY())sync(true)}
+$('#bkSave').onclick=makeBackup;
+$('#bkFile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)restoreBackup(f)};
 $('#syncNow').onclick=()=>sync(true);
 addEventListener('online',()=>{sync()});
 addEventListener('focus',()=>{sync()});
@@ -1061,6 +1098,7 @@ load(LIB.fsrs).then(()=>{recs=null;renderIntervals();if(!$('#study').hidden)rend
 (async()=>{await open();$('#key').value=KEY();await refresh();
  if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js');
  if(!KEY()){go('set');openSp('sync')}else{sync();refreshMe()}
+ setTimeout(()=>{const n=Date.now();if(cards.length>=5&&n-(+localStorage.lastBackup||0)>7*864e5&&n-(+localStorage.bkNag||0)>864e5){localStorage.bkNag=n;toast('Tip: make a backup in Settings › Backup',6000)}},4000);
  setInterval(()=>{if(!shown&&tab==='study'){renderChips();renderStudy()}},60000)})();
 </script>
 </body>
