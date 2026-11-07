@@ -137,16 +137,84 @@ async function generate(env, word) {
   return { error: msg.slice(0, 500) };
 }
 
-// ---------- storage: D1 (one row per card) ----------
+// ---------- users & keys ----------
+// APP_KEY (Worker secret) = the admin's key. Every other user has a random key that is
+// stored only as a SHA-256 hash in table `users`; the plain key is shown once, when created.
+const enc = new TextEncoder();
+const hex = (u8) => [...u8].map((b) => b.toString(16).padStart(2, "0")).join("");
+const rand = (n) => hex(crypto.getRandomValues(new Uint8Array(n)));
+const sha256 = async (s) => hex(new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(s))));
+function safeEq(a, b) {
+  a = String(a); b = String(b);
+  let d = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return d === 0;
+}
+
+async function authenticate(env, req) {
+  const key = req.headers.get("x-app-key") || "";
+  if (!key || !env.APP_KEY) return null;
+  if (safeEq(key, env.APP_KEY)) return { uid: "admin", admin: true, name: "Admin" };
+  await initDb(env);
+  const row = await env.DB.prepare("SELECT id, name FROM users WHERE key_hash=?").bind(await sha256(key)).first();
+  return row ? { uid: row.id, admin: false, name: row.name } : null;
+}
+
+async function adminApi(env, url, req) {
+  const p = url.pathname, body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+  if (p === "/api/admin/users" && req.method === "GET") {
+    const { results } = await env.DB.prepare(
+      "SELECT u.id, u.name, u.created_at, (SELECT COUNT(*) FROM ucards c WHERE c.uid=u.id) AS cards FROM users u ORDER BY u.created_at"
+    ).all();
+    return json({ users: results });
+  }
+  if (p === "/api/admin/users" && req.method === "POST") {
+    const name = String(body.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!name) return json({ error: "name required" }, 400);
+    const n = await env.DB.prepare("SELECT COUNT(*) AS n FROM users").first();
+    if (n.n >= 200) return json({ error: "too many users" }, 400);
+    const id = rand(4), key = rand(16);
+    await env.DB.prepare("INSERT INTO users (id,name,key_hash,created_at) VALUES (?,?,?,?)")
+      .bind(id, name, await sha256(key), Date.now()).run();
+    return json({ id, name, key });
+  }
+  if (p === "/api/admin/reset" && req.method === "POST") {
+    const key = rand(16);
+    const r = await env.DB.prepare("UPDATE users SET key_hash=? WHERE id=?").bind(await sha256(key), String(body.id || "")).run();
+    return r.meta.changes ? json({ id: body.id, key }) : json({ error: "no such user" }, 404);
+  }
+  if (p === "/api/admin/delete" && req.method === "POST") {
+    const id = String(body.id || "");
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM ucards WHERE uid=?").bind(id),
+      env.DB.prepare("DELETE FROM users WHERE id=?").bind(id),
+    ]);
+    return json({ ok: true });
+  }
+  return json({ error: "not found" }, 404);
+}
+
+// ---------- storage: D1 (one row per card, per user) ----------
 let ready = false;
 async function initDb(env) {
   if (ready) return;
   await env.DB.batch([
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS cards (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL, synced_at INTEGER NOT NULL)"),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cards_synced ON cards (synced_at)"),
-    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_cards_synced_id ON cards (synced_at, id)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS ucards (uid TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL, synced_at INTEGER NOT NULL, PRIMARY KEY (uid, id))"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ucards_synced ON ucards (uid, synced_at, id)"),
   ]);
+  // one-time: move the old single-user deck (table `cards`) to the admin account.
+  // The old table is left untouched as a backup.
+  const mu = await env.DB.prepare("SELECT v FROM meta WHERE k='multiuser'").first();
+  if (!mu) {
+    const old = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='cards'").first();
+    if (old)
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO ucards (uid,id,data,updated_at,synced_at) SELECT 'admin', id, data, updated_at, synced_at FROM cards"
+      ).run();
+    await env.DB.prepare("INSERT OR REPLACE INTO meta (k,v) VALUES ('multiuser','1')").run();
+  }
   // one-time import of the old KV deck (if the KV binding still exists)
   const done = await env.DB.prepare("SELECT v FROM meta WHERE k='kv_imported'").first();
   if (!done) {
@@ -157,7 +225,7 @@ async function initDb(env) {
       for (let i = 0; i < rows.length; i += 50) {
         await env.DB.batch(
           rows.slice(i, i + 50).map((c) =>
-            env.DB.prepare("INSERT OR IGNORE INTO cards (id,data,updated_at,synced_at) VALUES (?,?,?,?)")
+            env.DB.prepare("INSERT OR IGNORE INTO ucards (uid,id,data,updated_at,synced_at) VALUES ('admin',?,?,?,?)")
               .bind(c.id, JSON.stringify(c), c.updatedAt || 0, now)
           )
         );
@@ -169,16 +237,24 @@ async function initDb(env) {
 }
 
 const UPSERT =
-  "INSERT INTO cards (id,data,updated_at,synced_at) VALUES (?,?,?,?) " +
-  "ON CONFLICT(id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at, synced_at=excluded.synced_at " +
-  "WHERE excluded.updated_at > cards.updated_at";
+  "INSERT INTO ucards (uid,id,data,updated_at,synced_at) VALUES (?,?,?,?,?) " +
+  "ON CONFLICT(uid,id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at, synced_at=excluded.synced_at " +
+  "WHERE excluded.updated_at > ucards.updated_at";
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(req);
-    if (!env.APP_KEY || req.headers.get("x-app-key") !== env.APP_KEY)
-      return json({ error: "unauthorized" }, 401);
+    let me;
+    try {
+      me = await authenticate(env, req);
+    } catch (e) {
+      return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
+    }
+    if (!me) return json({ error: "unauthorized" }, 401);
+    const uid = me.uid;
+
+    if (url.pathname === "/api/me") return json({ uid, name: me.name, admin: me.admin });
 
     if (url.pathname === "/api/generate" && req.method === "POST") {
       const { word } = await req.json();
@@ -193,13 +269,22 @@ export default {
       return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
     }
 
+    if (url.pathname.startsWith("/api/admin/")) {
+      if (!me.admin) return json({ error: "forbidden" }, 403);
+      try {
+        return await adminApi(env, url, req);
+      } catch (e) {
+        return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
+      }
+    }
+
     // For Apple Shortcuts: POST {"word": "..."} -> card is generated and saved in category "General"
     if (url.pathname === "/api/add" && req.method === "POST") {
       const body = await req.json().catch(() => ({}));
       const word = String(body.word || "").replace(/\s+/g, " ").trim();
       if (!word || word.length > 60) return json({ error: "bad word" }, 400);
       const id = word.toLowerCase();
-      const row = await env.DB.prepare("SELECT data FROM cards WHERE id=?").bind(id).first();
+      const row = await env.DB.prepare("SELECT data FROM ucards WHERE uid=? AND id=?").bind(uid, id).first();
       if (row && !JSON.parse(row.data).deleted) return json({ ok: true, exists: true, word });
       const r = await generate(env, word);
       const now = Date.now();
@@ -210,7 +295,7 @@ export default {
         due: now, interval: 0, reps: 0, createdAt: now, updatedAt: now,
       };
       if (!r.error) card.data = r.data;
-      await env.DB.prepare(UPSERT).bind(id, JSON.stringify(card), now, now).run();
+      await env.DB.prepare(UPSERT).bind(uid, id, JSON.stringify(card), now, now).run();
       if (r.error)
         return json({ ok: true, pending: true, word, message: "ذخیره شد، کارت بعداً ساخته می‌شود", reason: r.error.slice(0, 120) });
       return json({ ok: true, word, en: r.data.en, fa: r.data.fa, message: r.data.fa });
@@ -228,7 +313,7 @@ export default {
         for (let i = 0; i < valid.length; i += 50) {
           await env.DB.batch(
             valid.slice(i, i + 50).map((c) =>
-              env.DB.prepare(UPSERT).bind(c.id, JSON.stringify(c), c.updatedAt || 0, now)
+              env.DB.prepare(UPSERT).bind(uid, c.id, JSON.stringify(c), c.updatedAt || 0, now)
             )
           );
         }
@@ -238,12 +323,12 @@ export default {
         const lim = Math.min(Math.max(parseInt(limit) || 0, 0), 500);
         const out = (body) => new Response(body, { headers: { "content-type": "application/json" } });
         if (!lim) {
-          const { results } = await env.DB.prepare("SELECT data FROM cards WHERE synced_at > ?").bind(since).all();
+          const { results } = await env.DB.prepare("SELECT data FROM ucards WHERE uid=? AND synced_at > ?").bind(uid, since).all();
           return out(`{"cards":[${results.map((r) => r.data).join(",")}],"now":${now}}`);
         }
         const { results } = await env.DB.prepare(
-          "SELECT id, data, synced_at FROM cards WHERE (synced_at, id) > (?, ?) ORDER BY synced_at, id LIMIT ?"
-        ).bind(since, String(after), lim).all();
+          "SELECT id, data, synced_at FROM ucards WHERE uid=? AND (synced_at, id) > (?, ?) ORDER BY synced_at, id LIMIT ?"
+        ).bind(uid, since, String(after), lim).all();
         // also cap the page by size (maxBytes), always returning at least one card
         let rows = results, trimmed = false;
         const mb = parseInt(maxBytes) || 0;

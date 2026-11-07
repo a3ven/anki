@@ -12,3 +12,11 @@
 - Offline: cards live in IndexedDB. Words added offline stay "pending" and are generated and synced when you're back online.
 - Intervals: Again 30 min, Hard 1 day, Good 3 days, Easy 1 year. Shortcuts: Space and 1–4.
 - apkg: export from Anki with "Support older Anki versions" enabled.
+
+## Multiple users
+- The `APP_KEY` secret is the **admin** key (your existing deck stays under it).
+- Sign in with the admin key → Settings → **Users** → type a name → **Create user**. A random key is shown once; send it to that person. They open the app, paste it in Settings → Sync, and get their own empty deck.
+- Each user's cards are separate. "New key" replaces a lost key; "Delete" removes the user and their cards.
+- User keys are stored only as SHA-256 hashes. The Workers AI daily quota is shared by all users.
+- Upgrade note: the first request after deploying copies the old `cards` table into the new per-user table (under admin). The old table stays as a backup.
+
