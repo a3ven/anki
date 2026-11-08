@@ -213,6 +213,7 @@ async function adminApi(env, url, req) {
     const id = String(body.id || "");
     await env.DB.batch([
       env.DB.prepare("DELETE FROM ucards WHERE uid=?").bind(id),
+      env.DB.prepare("DELETE FROM usettings WHERE uid=?").bind(id),
       env.DB.prepare("DELETE FROM users WHERE id=?").bind(id),
     ]);
     return json({ ok: true });
@@ -229,6 +230,7 @@ async function initDb(env) {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, name TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL)"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS ucards (uid TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at INTEGER NOT NULL, synced_at INTEGER NOT NULL, PRIMARY KEY (uid, id))"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_ucards_synced ON ucards (uid, synced_at, id)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS usettings (uid TEXT NOT NULL, k TEXT NOT NULL, v TEXT, t INTEGER NOT NULL, PRIMARY KEY (uid, k))"),
   ]);
   // one-time: move the old single-user deck (table `cards`) to the admin account.
   // The old table is left untouched as a backup.
@@ -291,6 +293,32 @@ export default {
     const uid = me.uid;
 
     if (url.pathname === "/api/me") return json({ uid, name: me.name, admin: me.admin });
+
+    // Card settings (front/back layout, pins, order, sort, review parameters) are synced between devices.
+    // The client sends the keys it changed ({k, v, t}); the newest change per key wins. The answer is the full state.
+    if (url.pathname === "/api/settings" && req.method === "POST") {
+      try {
+        await initDb(env);
+        const body = await req.json().catch(() => ({}));
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 300).filter(
+          (x) => x && typeof x.k === "string" && x.k.length <= 120 && Number.isFinite(x.t) &&
+            (x.v === null || (typeof x.v === "string" && x.v.length <= 20000))
+        );
+        if (items.length) {
+          const cnt = await env.DB.prepare("SELECT COUNT(*) AS n FROM usettings WHERE uid=?").bind(uid).first();
+          if (cnt.n < 3000)
+            await env.DB.batch(items.map((x) =>
+              env.DB.prepare(
+                "INSERT INTO usettings (uid,k,v,t) VALUES (?,?,?,?) ON CONFLICT(uid,k) DO UPDATE SET v=excluded.v, t=excluded.t WHERE excluded.t > usettings.t"
+              ).bind(uid, x.k, x.v, Math.round(x.t))
+            ));
+        }
+        const { results } = await env.DB.prepare("SELECT k, v, t FROM usettings WHERE uid=?").bind(uid).all();
+        return json({ items: results });
+      } catch (e) {
+        return json({ error: "db: " + String(e.message || e).slice(0, 200) }, 500);
+      }
+    }
 
     if (url.pathname === "/api/generate" && req.method === "POST") {
       const { word } = await req.json();
