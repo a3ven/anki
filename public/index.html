@@ -437,11 +437,12 @@ function setCatLayout(n,v){const m=LAYS();if(v)m[n]=v;else delete m[n];localStor
 /* fields of a card: the imported columns, or - for AI-generated cards - the parts of the generated card */
 function fieldsOf(c){if(c.fields&&c.fields.length)return c.fields;
  if(c.status!=='ready'||!c.data)return[];const d=c.data;
- const ex=(d.examples||[]).map(e=>[e.en,e.fa].filter(Boolean).join('\n')).filter(Boolean).join('\n\n');
- return[['Word',c.word],['English',d.en],['Part of speech',d.pos],['IPA',d.ipa],['Pronunciation',d.fa_pron],['Persian meaning',d.fa],['Examples',ex],['Note',d.note]].map(([n,v])=>({n,v:String(v||'')}))}
+ const E=d.examples||[],ex=[];for(let i=0;i<Math.max(2,E.length);i++){const e=E[i]||{};ex.push(['Example '+(i+1),e.en],['Example '+(i+1)+' (Persian)',e.fa])}
+ return[['Word',c.word],['English',d.en],['Part of speech',d.pos],['IPA',d.ipa],['Pronunciation',d.fa_pron],['Persian meaning',d.fa],...ex,['Note',d.note]].map(([n,v])=>({n,v:String(v||'')}))}
 const fieldVal=(c,n)=>(fieldsOf(c).find(x=>x.n===n)||{}).v||'';
 function layoutOf(c){const L=catLayout(catOf(c));if(!L)return null;const fl=fieldsOf(c);if(!fl.length)return null;
- const f=L.front||[],b=L.back||[],o=L.order||[];
+ const xp=a=>a.flatMap(n=>n==='Examples'?fl.map(x=>x.n).filter(m=>/^Example \d/.test(m)):[n]);
+ const f=xp(L.front||[]),b=xp(L.back||[]),o=L.order||[];
  if(![...f,...b].some(n=>fl.some(x=>x.n===n)))return null; // layout made for other fields (e.g. imported columns)
  return c.rev?{front:b,back:f,order:o}:{front:f,back:b,order:o}}
 function fieldsHtml(c,L,all){
