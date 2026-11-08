@@ -81,6 +81,7 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 .sgrp{background:var(--surf);border-radius:20px;overflow:hidden}
 .srow{display:flex;align-items:center;gap:14px;width:100%;border:0;background:none;color:var(--ink);font:inherit;font-size:17px;padding:15px 16px;text-align:start;cursor:pointer}
 .srow+.srow{border-top:1px solid var(--line)}.srow[hidden]{display:none}
+input.secret{-webkit-text-security:disc;text-security:disc} /* looks like a password field, but is not one, so browsers do not offer to save it */
 .urow{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--line)}.urow .nm{flex:1;min-width:0}.urow .nm b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.urow .nm small{color:var(--mute)}.newkey{margin-top:14px;padding:14px 16px;border-radius:16px;background:var(--surf);word-break:break-all}.newkey code{display:block;margin:8px 0;font-size:15px;user-select:all;direction:ltr}
 .srow svg.i{color:var(--acc);flex:none}
 .srow span{flex:1}
@@ -203,8 +204,8 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
     <button class="srow" data-sp="users" id="usersRow" hidden><svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/></svg><span>Users</span><i class="chev">›</i></button>
   </div>
   <div class="spg" id="sp_sync" hidden>
-    <label for="key" style="margin-top:4px">Access key (the APP_KEY secret set on the Worker)</label>
-    <input type="password" id="key" autocomplete="off">
+    <label for="key" style="margin-top:4px">Access key</label>
+    <input type="text" id="key" name="access-key-field" class="secret" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other" style="direction:ltr">
     <div class="row" style="margin-top:12px">
       <button class="btn pri" id="saveKey">Save &amp; sync</button>
       <button class="btn" id="syncNow">Sync now</button>
