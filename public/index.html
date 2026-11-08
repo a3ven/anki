@@ -36,9 +36,13 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 /* study */
 .top{display:flex;justify-content:space-between;color:var(--mute);font-size:13px;margin:0 4px 10px}
 .card{background:var(--surf);border-radius:26px;padding:24px 20px;min-height:260px}
-.word{white-space:pre-line;font-size:36px;font-weight:700;text-align:center;margin:56px 0;word-break:break-word}
+.word{white-space:pre-line;font-size:calc(36px*var(--ff,1));font-weight:700;text-align:center;margin:56px 0;word-break:break-word}
 .en{direction:ltr;unicode-bidi:isolate}
 .big{font-size:26px;font-weight:700}
+.card.bk{font-size:calc(16px*var(--fb,1))}
+.bk .big{font-size:1.625em}.bk .big.fa{font-size:1.375em}.bk .fld div{font-size:1.1875em}.bk .fld small{font-size:.75em}
+.bk .ex .tr{font-size:.9375em}.bk .pron .en{font-size:.875em}.bk .note{font-size:.875em}.bk .tag{font-size:.75em}
+.szr{display:flex;align-items:center;gap:12px}.szr input{flex:1}.szr b{min-width:46px;text-align:end;font-variant-numeric:tabular-nums}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pron{color:var(--mute);margin:2px 0 10px}
 .pron .en{font-family:ui-monospace,Menlo,monospace;font-size:14px}
@@ -231,6 +235,16 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
   <div class="spg" id="sp_look" hidden>
     <label style="margin-top:4px">Theme</label>
     <div class="row"><button class="btn sm" data-th="dark">Black</button><button class="btn sm" data-th="light">Light</button></div>
+    <label for="fsF" style="margin-top:18px">Card front text size</label>
+    <div class="szr"><input type="range" id="fsF" min="50" max="200" step="5"><b id="fsFv"></b></div>
+    <label for="fsB" style="margin-top:14px">Card back text size</label>
+    <div class="szr"><input type="range" id="fsB" min="60" max="200" step="5"><b id="fsBv"></b></div>
+    <div class="card" style="min-height:0;margin-top:16px;padding:14px"><small class="pron">Preview</small>
+      <div class="word" dir="auto" style="margin:18px 0">دویدن</div>
+      <div class="bk" style="font-size:calc(16px*var(--fb,1));border-top:1px solid var(--line);padding-top:10px"><div class="row"><span class="big en">run</span><span class="tag">verb</span></div>
+        <div class="pron"><span class="en">/rʌn/</span></div><div class="big fa" dir="auto">دویدن</div>
+        <div class="ex"><div class="en">I run every morning.</div><div class="tr" dir="auto">من هر روز صبح می‌دوم.</div></div></div></div>
+    <div class="row" style="margin-top:12px"><button class="btn sm" id="fsReset">Reset sizes</button></div>
   </div>
   <div class="spg" id="sp_iv" hidden>
     <label style="margin-top:4px">Desired retention</label>
@@ -458,7 +472,7 @@ function backHtml0(c,all){const L=layoutOf(c);if(L)return fieldsHtml(c,L,all);co
  return `<div class="row"><span class="big en">${esc(d.en)}</span>
  <button class="btn sm" data-say="${esc(d.en)}" aria-label="Play pronunciation">🔊</button>${d.pos?`<span class="tag">${esc(d.pos)}</span>`:''}</div>
  <div class="pron"><span class="en">${esc(d.ipa)}</span> &nbsp; <span dir="auto">${esc(d.fa_pron)}</span></div>
- <div class="big" dir="auto" style="font-size:22px">${esc(d.fa)}</div>
+ <div class="big fa" dir="auto">${esc(d.fa)}</div>
  ${(d.examples||[]).map(e=>`<div class="ex"><div class="en">${esc(e.en)}</div><div class="tr" dir="auto">${esc(e.fa)}</div></div>`).join('')}
  ${d.note?`<div class="note" dir="auto">${esc(d.note)}</div>`:''}`}
 let studyOpen=false;
@@ -486,7 +500,7 @@ function renderStudy(){
  const c=cur;
  if(shown&&(!recs||recs.id!==c.id)){const now=new Date();recs={id:c.id,now:+now,r:fsRepeat(fsLoad(c,now),now)}}
  el.innerHTML=`<div class="top"><span>${list.length} due</span><span>${sel.length} total</span></div>
- <div class="card">${shown?backHtml(c):`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>`;
+ <div class="card${shown?' bk':''}">${shown?backHtml(c):`<div class="word" dir="auto">${esc(frontOf(c))}</div>`}</div>`;
  dock.innerHTML=(shown?`<div class="rate">${['again','hard','good','easy'].map((k,i)=>`<button class="${k[0]}" data-r="${k}">${NAME[k]}<small>${fmtIv(+recs.r[i+1].due-recs.now)}</small></button>`).join('')}<button class="s" data-r="skip">Skip<small>7 y</small></button></div>`
  :'<button class="btn pri show" id="showBtn">Show answer</button>');
  dock.className='on'}
@@ -1036,7 +1050,7 @@ $('#uList').addEventListener('click',async e=>{const r=e.target.closest('[data-u
    await apiJ('/api/admin/delete',null,{method:'POST',body:JSON.stringify({id:d.dataset.ud})});$('#nuKey').hidden=true;loadUsers()}}
  catch(err){toast(err.message,4000)}});
 /* ---------- local backup / restore (per account, on this device) ---------- */
-const BK_KEYS=['catPins','catOrder','catSort','catLayout','dr','steps','studyCat','lastCat'];
+const BK_KEYS=['fsFront','fsBack','catPins','catOrder','catSort','catLayout','dr','steps','studyCat','lastCat'];
 async function renderBackup(){const n=(await getAll()).filter(c=>!c.deleted).length,t=+localStorage.lastBackup;
  $('#bkInfo').textContent=`${n} cards on this device · last backup: ${t?new Date(t).toLocaleString('en-US'):'never'}`}
 async function makeBackup(){
@@ -1069,6 +1083,13 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
 setInterval(()=>{if(!document.hidden&&KEY())sync()},60000); // desktop tabs stay open: pull other devices' changes regularly
 
 /* ---------- theme / speed / tabs / boot ---------- */
+const FS=k=>Math.min(200,Math.max(50,parseInt(localStorage[k])||100));
+function applySizes(){const r=document.documentElement.style;r.setProperty('--ff',FS('fsFront')/100);r.setProperty('--fb',FS('fsBack')/100);
+ const f=$('#fsF'),b=$('#fsB');if(f){f.value=FS('fsFront');$('#fsFv').textContent=FS('fsFront')+'%'}if(b){b.value=FS('fsBack');$('#fsBv').textContent=FS('fsBack')+'%'}}
+applySizes();
+$('#fsF').oninput=e=>{try{localStorage.fsFront=e.target.value}catch{}applySizes()};
+$('#fsB').oninput=e=>{try{localStorage.fsBack=e.target.value}catch{}applySizes()};
+$('#fsReset').onclick=()=>{try{localStorage.removeItem('fsFront');localStorage.removeItem('fsBack')}catch{}applySizes()};
 function setTheme(t){localStorage.theme=t;document.documentElement.dataset.theme=t;
  document.querySelector('meta[name=theme-color]').content=t==='light'?'#f2f2f7':'#000000';
  document.querySelectorAll('[data-th]').forEach(b=>b.classList.toggle('on',b.dataset.th===t))}
