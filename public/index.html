@@ -36,11 +36,11 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 /* study */
 .top{display:flex;justify-content:space-between;color:var(--mute);font-size:13px;margin:0 4px 10px}
 .card{background:var(--surf);border-radius:26px;padding:24px 20px;min-height:260px}
-.word{white-space:pre-line;font-size:calc(36px*var(--ff,1));font-weight:700;text-align:center;margin:56px 0;word-break:break-word}
+.word{white-space:pre-line;font-size:calc(36px*var(--ff,1)*var(--fz,1));font-weight:700;text-align:center;margin:56px 0;word-break:break-word}
 .en{direction:ltr;unicode-bidi:isolate}
 .big{font-size:26px;font-weight:700}
 .card.bk{font-size:calc(16px*var(--fb,1))}
-.bk .big{font-size:1.625em}.bk .big.fa{font-size:1.375em}.bk .fld div{font-size:1.1875em}.bk .fld small{font-size:.75em}
+.bk .big{font-size:1.625em}.bk .big.fa{font-size:1.375em}.bk .fld div{font-size:calc(1.1875em*var(--fz,1))}.bk .fld small{font-size:.75em}
 .bk .ex .tr{font-size:.9375em}.bk .pron .en{font-size:.875em}.bk .note{font-size:.875em}.bk .tag{font-size:.75em}
 .szr{display:flex;align-items:center;gap:12px}.szr input{flex:1}.szr b{min-width:46px;text-align:end;font-variant-numeric:tabular-nums}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -50,7 +50,13 @@ nav button[aria-selected=true]{background:var(--bg);color:var(--acc)}
 .ex .en{font-weight:600}
 .ex .tr{color:var(--mute);font-size:15px}
 .note{background:var(--surf2);border-radius:14px;padding:10px 14px;font-size:14px;margin-top:12px}
-.fld{margin:12px 0}hr.fl{border:0;border-top:1px solid var(--line);margin:14px 0}.word.seg{margin:22px 0}.fld small{display:block;color:var(--mute);font-size:12px}.fld div{font-size:19px;white-space:pre-line;word-break:break-word}
+.fld{margin:12px 0}/* per-field text style (size / colour) chosen in Front / back fields */
+.word.fw{margin:6px 0}.fseg{margin:34px 0}.fseg+hr.fl{margin:0}
+.lysty{grid-column:2/-1;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--mute)}
+.lysty button{border:0;border-radius:10px;background:var(--surf2);color:var(--ink);font:inherit;font-size:13px;min-width:36px;padding:5px 8px;cursor:pointer}
+.lysty b{min-width:44px;text-align:center;color:var(--ink);font-variant-numeric:tabular-nums}
+.lysty input[type=color]{width:34px;height:30px;padding:0;border:0;border-radius:8px;background:none;cursor:pointer}.lysty input.un{opacity:.35}
+hr.fl{border:0;border-top:1px solid var(--line);margin:14px 0}.word.seg{margin:22px 0}.fld small{display:block;color:var(--mute);font-size:12px}.fld div{font-size:calc(19px*var(--fz,1));white-space:pre-line;word-break:break-word}
 .tag{font-size:12px;color:var(--mute);background:var(--surf2);border-radius:999px;padding:1px 9px;font-weight:500}
 .btn{font:inherit;border:0;background:var(--surf);color:var(--ink);border-radius:999px;padding:11px 18px;cursor:pointer;font-weight:600}
 .btn.pri{background:var(--acc);color:var(--onacc)}
@@ -449,6 +455,8 @@ const LAYS=()=>{try{return JSON.parse(localStorage.catLayout||'{}')}catch{return
 const catLayout=n=>LAYS()[n]||null;
 function setCatLayout(n,v){const m=LAYS();if(v)m[n]=v;else delete m[n];localStorage.catLayout=JSON.stringify(m)}
 /* fields of a card: the imported columns, or - for AI-generated cards - the parts of the generated card */
+const stOf=(L,n)=>{const x=(L&&L.style&&L.style[n])||{};return{s:Math.min(300,Math.max(50,+x.s||100)),c:/^#[0-9a-f]{6}$/i.test(x.c||'')?x.c:''}};
+const stAttr=(L,n,tail)=>{const x=stOf(L,n),o=[];if(x.s!==100)o.push('--fz:'+x.s/100);if(x.c)o.push('color:'+x.c);return o.length?` style="${o.join(';')}${tail||''}"`:''};
 const isLine=n=>/^__line/.test(n); // a divider line placed between fields in the layout
 function fieldsOf(c){if(c.fields&&c.fields.length)return c.fields;
  if(c.status!=='ready'||!c.data)return[];const d=c.data;
@@ -459,19 +467,20 @@ function layoutOf(c){const L=catLayout(catOf(c));if(!L)return null;const fl=fiel
  const xp=a=>a.flatMap(n=>n==='Examples'?fl.map(x=>x.n).filter(m=>/^Example \d/.test(m)):[n]);
  const f=xp(L.front||[]),b=xp(L.back||[]),o=L.order||[];
  if(![...f,...b].some(n=>fl.some(x=>x.n===n)))return null; // layout made for other fields (e.g. imported columns)
- return c.rev?{front:b,back:f,order:o}:{front:f,back:b,order:o}}
+ return c.rev?{front:b,back:f,order:o,style:L.style||{}}:{front:f,back:b,order:o,style:L.style||{}}}
 function fieldsHtml(c,L,all){
  const ord=(L.order||[]),names=all?fieldsOf(c).map(x=>x.n).sort((a,b)=>{const i=ord.indexOf(a),j=ord.indexOf(b);return (i<0?1e6:i)-(j<0?1e6:j)}):L.back,d=c.data||{};
  const say=[...L.front,...L.back].map(n=>fieldVal(c,n).split('\n')[0]).find(t=>t&&!ARA.test(t))||d.en||'';
  return (say?`<div class="row"><button class="btn sm" data-say="${esc(say)}" aria-label="Play pronunciation">🔊</button></div>`:'')
-  +joinLines(names.map(n=>isLine(n)?null:(v=>v?`<div class="fld"><small>${esc(n)}</small><div dir="auto">${esc(v)}</div></div>`:'')(fieldVal(c,n))))}
+  +joinLines(names.map(n=>isLine(n)?null:(v=>v?`<div class="fld"><small>${esc(n)}</small><div dir="auto"${stAttr(L,n)}>${esc(v)}</div></div>`:'')(fieldVal(c,n))))}
 // items: html strings ('' = empty field) and null (= divider line); a line is drawn only between two visible items
 function joinLines(items){let out='',pend=false;for(const x of items){if(x===null){if(out)pend=true;continue}if(!x)continue;if(pend)out+='<hr class="fl">';pend=false;out+=x}return out}
 const frontOf=c=>{const L=layoutOf(c);if(L){const t=L.front.map(n=>fieldVal(c,n)).filter(Boolean).join('\n');if(t)return t}
  const d=c.data||{};if(c.rev&&d.en&&d.fa)return ARA.test(c.word)?d.en:d.fa;return c.word};
 function frontHtml(c){const L=layoutOf(c);
- if(L&&L.front.some(isLine)){const items=[];let seg=[];const flush=()=>{const t=seg.join('\n');seg=[];items.push(t?`<div class="word seg" dir="auto">${esc(t)}</div>`:'')};
-  L.front.forEach(n=>{if(isLine(n)){flush();items.push(null)}else{const v=fieldVal(c,n);if(v)seg.push(v)}});flush();
+ if(L&&(L.front.some(isLine)||L.front.some(n=>!isLine(n)&&(stOf(L,n).s!==100||stOf(L,n).c)))){
+  const items=[];let seg=[];const flush=()=>{items.push(seg.length?`<div class="fseg">${seg.join('')}</div>`:'');seg=[]};
+  L.front.forEach(n=>{if(isLine(n)){flush();items.push(null)}else{const v=fieldVal(c,n);if(v)seg.push(`<div class="word fw" dir="auto"${stAttr(L,n)}>${esc(v)}</div>`)}});flush();
   const h=joinLines(items);if(h)return h}
  return `<div class="word" dir="auto">${esc(frontOf(c))}</div>`}
 const noteHtml=c=>c.unote?`<div class="note" dir="auto" style="white-space:pre-line">📝 ${esc(c.unote)}</div>`:'';
@@ -654,31 +663,40 @@ function openLayout(cat){const CT=cat||openCat;
  if(!names.length)return toast('No generated cards in this category yet');
  const L=catLayout(CT)||{front:[names[0]],back:names.slice(1)};
  if(L.order&&L.order.length){const o=L.order;names=[...o.filter(n=>names.includes(n)||isLine(n)),...names.filter(n=>!o.includes(n))]}
- const F=new Set(L.front||[]),B=new Set(L.back||[]);
+ const F=new Set(L.front||[]),B=new Set(L.back||[]),ST={...(L.style||{})};
  const sample=n=>{const c=cs.find(c=>fieldVal(c,n));return c?fieldVal(c,n).replace(/\s+/g,' ').slice(0,40):''};
  const rows=()=>names.map((n,i)=>`<div class="lyrow" data-key="${i}" style="display:grid;grid-template-columns:auto 1fr auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--surf2)">
   <span data-grip aria-label="Drag to reorder" title="Drag to reorder">${ico('grip')}</span>
   <div style="min-width:0">${isLine(n)?`<b>──── Line ────</b> <button class="x" data-rm="${i}" aria-label="Remove line" title="Remove line">✕</button>`:`<b dir="auto">${esc(n)}</b><div class="pron" dir="auto" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(sample(n))}</div>`}</div>
   <label style="font-size:13px"><input type="checkbox" data-f="${i}"${F.has(n)?' checked':''}> Front</label>
-  <label style="font-size:13px"><input type="checkbox" data-b="${i}"${B.has(n)?' checked':''}> Back</label></div>`).join('');
+  <label style="font-size:13px"><input type="checkbox" data-b="${i}"${B.has(n)?' checked':''}> Back</label>
+  ${isLine(n)?'':(x=>`<div class="lysty"><span>Size</span><button data-sz="${i}" data-d="-1" aria-label="Smaller">A−</button><b data-szv="${i}">${x.s}%</b><button data-sz="${i}" data-d="1" aria-label="Larger">A+</button>
+   <span style="margin-inline-start:6px">Colour</span><input type="color" data-col="${i}" value="${x.c||'#9a9aa0'}" class="${x.c?'':'un'}" aria-label="Text colour"><button data-cx="${i}" aria-label="Default colour" title="Default colour">✕</button></div>`)(stOf({style:ST},n))}</div>`).join('');
  $('#dlgBody').innerHTML=`<div class="row" style="justify-content:space-between"><b class="big">Front / back fields</b><button class="x" data-close aria-label="Close">✕</button></div>
  <div class="row" style="margin:6px 0 10px"><button class="btn pri" id="lySave">Save</button><button class="btn" id="lyLine">+ Line</button><button class="btn" id="lyDef">Default</button><button class="btn" id="lyNo">Cancel</button></div>
  <p class="pron" style="font-size:13px">Choose which fields of "${esc(CT)}" appear on the front and on the back, and drag the ⠿ handle to change their order. Applies to this category's cards.</p>
  <div id="lyRows">${rows()}</div>
  <div class="card" style="min-height:0;margin-top:14px;padding:14px"><small class="pron">Preview</small><div id="lyPrev" style="margin-top:6px"></div></div>`;
  const pick=a=>names.filter(n=>(a==='f'?F:B).has(n));
- const prev=()=>{const c=cs[0],f=pick('f'),b=pick('b'),t=l=>l.map(n=>isLine(n)?'────────':fieldVal(c,n)).filter(Boolean).join('\n');
-  $('#lyPrev').innerHTML=`<div class="fld"><small>Front</small><div dir="auto">${esc(t(f))||'—'}</div></div><div class="fld"><small>Back</small><div dir="auto">${esc(t(b))||'—'}</div></div>`};
+ const prev=()=>{const c=cs[0],f=pick('f'),b=pick('b'),LS={style:ST},
+   t=l=>l.map(n=>isLine(n)?'<hr class="fl">':(v=>v?`<div dir="auto"${stAttr(LS,n)}>${esc(v)}</div>`:'')(fieldVal(c,n))).join('')||'—';
+  $('#lyPrev').innerHTML=`<div class="fld"><small>Front</small>${t(f)}</div><div class="fld"><small>Back</small>${t(b)}</div>`};
  const box=$('#lyRows');
  $('#lyLine').onclick=()=>{let k=1;while(names.includes('__line'+k))k++;const n='__line'+k;names.push(n);B.add(n);box.innerHTML=rows();prev();box.lastElementChild&&box.lastElementChild.scrollIntoView({block:'nearest'})};
- box.addEventListener('click',e=>{const r=e.target.closest('[data-rm]');if(!r)return;const n=names[+r.dataset.rm];names=names.filter(x=>x!==n);F.delete(n);B.delete(n);box.innerHTML=rows();prev()});
+ box.addEventListener('click',e=>{
+  const z=e.target.closest('[data-sz]');if(z){const n=names[+z.dataset.sz],x=stOf({style:ST},n),v=Math.min(300,Math.max(50,x.s+10*(+z.dataset.d)));
+   ST[n]={...(ST[n]||{}),s:v};box.querySelector(`[data-szv="${z.dataset.sz}"]`).textContent=v+'%';prev();return}
+  const cx=e.target.closest('[data-cx]');if(cx){const n=names[+cx.dataset.cx];ST[n]={...(ST[n]||{})};delete ST[n].c;const el=box.querySelector(`[data-col="${cx.dataset.cx}"]`);el.classList.add('un');el.value='#9a9aa0';prev();return}
+  const r=e.target.closest('[data-rm]');if(!r)return;const n=names[+r.dataset.rm];names=names.filter(x=>x!==n);F.delete(n);B.delete(n);box.innerHTML=rows();prev()});
+ box.addEventListener('input',e=>{const t=e.target;if(t.dataset.col===undefined)return;const n=names[+t.dataset.col];ST[n]={...(ST[n]||{}),c:t.value};t.classList.remove('un');prev()});
  box.addEventListener('change',e=>{const t=e.target,a=t.dataset.f!==undefined?'f':t.dataset.b!==undefined?'b':null;if(!a)return;
   const n=names[+t.dataset[a]],S=a==='f'?F:B;t.checked?S.add(n):S.delete(n);prev()});
  dragSort(box,'.lyrow',keys=>{names=keys.map(k=>names[+k]);box.innerHTML=rows();prev()});
  prev();
  const apply=()=>{cur=null;shown=false;render()};
  $('#lySave').onclick=()=>{const f=pick('f'),b=pick('b');if(!f.some(n=>!isLine(n)))return toast('Pick at least one field for the front');
-  setCatLayout(CT,{front:f,back:b,order:[...names]});$('#dlg').close();apply();toast('Layout saved')};
+  const sty={};names.forEach(n=>{const x=stOf({style:ST},n);if(!isLine(n)&&(x.s!==100||x.c))sty[n]={...(x.s!==100?{s:x.s}:{}),...(x.c?{c:x.c}:{})}});
+  setCatLayout(CT,{front:f,back:b,order:[...names],style:sty});$('#dlg').close();apply();toast('Layout saved')};
  $('#lyDef').onclick=()=>{setCatLayout(CT,null);$('#dlg').close();apply();toast('Back to the default layout')};
  $('#lyNo').onclick=()=>$('#dlg').close();
  if(!$('#dlg').open)$('#dlg').showModal()}
@@ -762,7 +780,7 @@ $('#more').onclick=()=>{const a=[];
  if(tab==='cards'&&!openCat&&cards.length)a.push(['Reorder & pin',()=>{catEdit=true;renderList()},0,'sort'],['Export all to Excel',exportAll,0,'export']);
  if(tab==='cards'&&(SK()||cards.some(isSkip)))a.push([SK()?'Hide skipped cards':'Show skipped cards',()=>{try{localStorage.showSkipped=SK()?'0':'1'}catch{}renderList();toast(SK()?'Skipped cards are shown':'Skipped cards are hidden',1800)},0,'select']);
  if(genBusy)a.push(['Stop generating',stopGen,1,'stop']);
- a.push(['Sync now',()=>sync(true),0,'sync',a.length],['Switch theme',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'),0,'theme']);
+ a.push(['Appearance',()=>{go('set');openSp('look')},0,'theme',a.length],['Sync now',()=>sync(true),0,'sync'],['Switch theme',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'),0,'theme']);
  showSheet(a,'',true)};
 
 /* ---------- card detail + edit ---------- */
