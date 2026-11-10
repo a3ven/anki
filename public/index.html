@@ -24,6 +24,8 @@ svg.i{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.8;stro
 
 /* header */
 header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 14px}
+.rb .i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#syncBtn.busy .i{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .rb{width:46px;height:46px;border-radius:50%;border:0;background:var(--surf);color:var(--ink);display:grid;place-items:center;cursor:pointer;font-size:22px;flex:none}
 h1{font-size:19px;font-weight:700;margin:0;text-align:center;flex:1;unicode-bidi:plaintext;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -182,7 +184,8 @@ svg.i.pn{width:15px;height:15px;stroke-width:2.2;margin-inline-start:7px;vertica
 <div id="msg" role="status"></div>
 <main>
 <header>
-  <button class="rb" id="back" aria-label="Back" style="visibility:hidden">‹</button>
+  <button class="rb" id="syncBtn" aria-label="Sync now" title="Sync now"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.5-4M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.5 4M20 20v-4h-4"/></svg></button>
+  <button class="rb" id="back" aria-label="Back" style="display:none">‹</button>
   <h1 id="title">Study</h1>
   <button class="rb" id="more" aria-label="More">⋯</button>
 </header>
@@ -591,7 +594,8 @@ function openSp(k){spOpen=k||null;if(spOpen==='users')loadUsers();if(spOpen==='b
 $('#setHome').addEventListener('click',e=>{const b=e.target.closest('[data-sp]');if(b)openSp(b.dataset.sp)});
 function renderHeader(){
  $('#title').textContent={study:studyOpen?(studyCat||'All categories'):'Study',add:'Add',cards:openCat||'Cards',set:spOpen?SPN[spOpen]:'Settings'}[tab];
- $('#back').style.visibility=((tab==='study'&&studyOpen)||(tab==='cards'&&openCat)||(tab==='set'&&spOpen))?'visible':'hidden';
+ const inner=(tab==='study'&&studyOpen)||(tab==='cards'&&openCat)||(tab==='set'&&spOpen); // inside a screen: Back; on the main screens: Sync
+ $('#back').style.display=inner?'':'none';$('#syncBtn').style.display=inner?'none':'';
  document.body.classList.toggle('studying',tab==='study'&&studyOpen)}
 let selMode=false,sel=new Set();
 const isSkip=c=>!!c.skipped&&c.due>Date.now(),SK=()=>localStorage.showSkipped==='1'; // skipped cards are hidden in the Cards tab unless switched on in the menu
@@ -751,6 +755,7 @@ $('#selbar').addEventListener('click',async e=>{const t=e.target.closest('button
   showSheet([...catsOrd().map(n=>[n,()=>mv(n),0,'folder']),['New category…',()=>{const n=(prompt('New category name')||'').trim();if(n)mv(n)},0,'plus']],'Move to')}});
 
 /* ---------- header actions ---------- */
+$('#syncBtn').onclick=()=>sync(true);
 $('#back').onclick=()=>{if(tab==='study'&&studyOpen){closeDeck();return}if(tab==='set'&&spOpen){openSp(null);return}if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
 function showSheet(a,title,pop){const d=$('#sheet');d.classList.toggle('pop',!!pop);
  if(pop){const r=$('#more').getBoundingClientRect();d.style.setProperty('--pt',Math.round(r.top)+'px');d.style.setProperty('--pr',(innerWidth>600?Math.max(16,Math.round(innerWidth-r.right)):16)+'px')}
@@ -1036,7 +1041,7 @@ async function sync(manual){
  if(!KEY()){if(manual===true)toast('Enter the access key in Settings');return}
  if(!navigator.onLine){syncState('Offline — will sync when back online');if(manual===true)toast('You are offline');return}
  syncSettings(true);
- syncing=true;let retry=0,progress=false;
+ syncing=true;$('#syncBtn').classList.add('busy');let retry=0,progress=false;
  try{const OV=600000,full=manual===true,since=full?0:Math.max(0,(+localStorage.since||0)-OV),lastPush=full?0:Math.max(0,(+localStorage.lastPush||0)-OV);
   // one request; big bodies are gzipped (much smaller upload, and the connection survives more often)
   const post=async(b,what,kind)=>{let body=JSON.stringify(b);const h={'content-type':'application/json','x-app-key':KEY()};
@@ -1080,7 +1085,7 @@ async function sync(manual){
   if(progress){syncFail=0;retry=400} // it moved forward before the connection dropped: just continue
   else{syncFail++;retry=Math.min(15000*syncFail,120000)}
   syncState('Sync interrupted: '+String(e.message||e).slice(0,110)+' — continuing')}
- finally{syncing=false;
+ finally{syncing=false;$('#syncBtn').classList.remove('busy');
   if(retry)setTimeout(sync,retry);else if(syncAgain){syncAgain=false;setTimeout(sync,500)}}}
 /* ---------- accounts: admin creates users, each key = separate deck ---------- */
 const apiJ=async(path,key,opt={})=>{const r=await fetch(path,{...opt,headers:{'content-type':'application/json','x-app-key':key||KEY()}});
