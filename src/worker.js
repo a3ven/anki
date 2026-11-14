@@ -47,7 +47,7 @@ function parse(out) {
   return JSON.parse(m[0]);
 }
 
-// ---------- AI providers: Cloudflare first, then fallbacks ----------
+// ---------- AI providers (the order is set in generate() below) ----------
 // Each fallback is optional: it is used only if its secret key is set in the Worker.
 // Models can be changed without editing code via the *_MODEL variables.
 function fallbackProviders(env) {
@@ -122,17 +122,30 @@ async function viaOpenAICompat(p, word, errs) {
   }
 }
 
+// Order in which the AI services are tried (the first one that answers wins). Services without a key are skipped.
+// Change it without editing code: set the AI_ORDER variable in the Worker, e.g. "cloudflare,groq,openrouter".
+const DEFAULT_ORDER = "groq,cloudflare,gemini,openrouter,mistral";
+
 async function generate(env, word) {
   const errs = [];
-  const cf = await viaCloudflare(env, word, errs);
-  if (cf) return cf;
-  for (const p of fallbackProviders(env)) {
-    const r = await viaOpenAICompat(p, word, errs);
-    if (r) return r;
+  const fb = fallbackProviders(env);
+  const want = String(env.AI_ORDER || DEFAULT_ORDER).toLowerCase().split(/[\s,]+/).filter(Boolean);
+  // anything not named in the order is still tried, after the named ones
+  const order = [...want, "cloudflare", "gemini", "groq", "openrouter", "mistral"].filter((n, i, a) => a.indexOf(n) === i);
+  for (const name of order) {
+    if (name === "cloudflare") {
+      const cf = await viaCloudflare(env, word, errs);
+      if (cf) return cf;
+    } else {
+      for (const p of fb.filter((x) => x.name === name)) {
+        const r = await viaOpenAICompat(p, word, errs);
+        if (r) return r;
+      }
+    }
   }
   // The app shows "quota used up" whenever the error text contains 4006. If fallbacks
   // were tried, hide that code so the real fallback errors are shown instead.
-  const hasFallback = fallbackProviders(env).length > 0;
+  const hasFallback = fb.length > 0;
   const msg = (hasFallback ? errs.slice().reverse() : errs).join(" | ").replace(hasFallback ? /4006/g : /$^/, "CF-quota");
   return { error: msg.slice(0, 500) };
 }
