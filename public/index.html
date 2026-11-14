@@ -611,6 +611,7 @@ function renderSelbar(){const b=$('#selbar');if(!selMode||tab!=='cards'){b.style
   +ib('data-sa',all?'desel':'selall',all?'Deselect all':'Select all')
   +ib('data-sm'+(n?'':' disabled'),'move','Move')
   +(nr?ib('data-sg','gen','Generate remaining','',nr):'')+(genBusy?ib('data-stopgen','stop','Stop generating','stopg'):'')
+  +ib('data-sr'+(n?'':' disabled'),'sync','Regenerate with AI')
   +ib('data-sd'+(n?'':' disabled'),'del','Delete','danger')
   +ib('data-sx','done','Done')}
 function renderList(){
@@ -748,6 +749,7 @@ $('#selbar').addEventListener('click',async e=>{const t=e.target.closest('button
  if('sa' in t.dataset){const v=visible();if(sel.size===v.length)sel.clear();else v.forEach(c=>sel.add(c.id));renderList()}
  else if('sx' in t.dataset)exitSel();
  else if('sg' in t.dataset){const l=chosen();selMode=false;sel.clear();await requestGen(l)}
+ else if('sr' in t.dataset){const l=chosen();if(!l.some(canRegen))return toast('Nothing to regenerate in this selection',3000);selMode=false;sel.clear();renderList();await regen(l)}
  else if('sd' in t.dataset){const l=chosen();if(!confirm(`Delete ${l.length} card${l.length>1?'s':''}?`))return;
   const now=Date.now();l.forEach(c=>{c.deleted=true;c.updatedAt=now});await putMany(l);selMode=false;sel.clear();await refresh();scheduleSync();toast('Deleted')}
  else if('sm' in t.dataset){const l=chosen();
@@ -768,6 +770,7 @@ $('#more').onclick=()=>{const a=[];
   a.push(['Edit card',()=>{editFromStudy=true;openEdit(c.id);if(!$('#dlg').open)$('#dlg').showModal()},0,'rename'],
    [c.unote?'Edit note':'Add note',()=>editNote(c),0,'note']);
   if(c.data)a.push(['Add 2 examples with AI',()=>addExamples(c),0,'gen']);
+  if(canRegen(c))a.push(['Regenerate with AI',()=>regen([c]),0,'sync']);
   a.push([c.fav?'Remove from favorites':'Add to favorites',()=>toggleFav(c),0,'star'])}
  if(tab==='study'&&studyOpen){
   if(undoStack.length)a.push(['Undo last answer ('+undoStack.length+')',undoLast,0,'reset']);
@@ -784,6 +787,7 @@ $('#more').onclick=()=>{const a=[];
    ...(rt.length?[[rt.every(c=>c.rev)?'Restore normal order':'Reverse all cards',()=>reverseCat(),0,'flip']]:[]),
    ['Export to Excel',()=>exportCat(openCat),0,'export'],
    ...(nr&&!genBusy?[['Generate remaining',()=>requestGen(cs0),0,'gen']]:[]),
+   ...(!genBusy&&cs0.some(canRegen)?[['Regenerate all with AI',()=>regen(cs0),0,'sync']]:[]),
    ...(isF?[]:[['Delete all cards',deleteCat,1,'del']]))}
  if(tab==='cards'&&!openCat&&cards.length)a.push(['Reorder & pin',()=>{catEdit=true;renderList()},0,'sort'],['Export all to Excel',exportAll,0,'export']);
  if(tab==='cards'&&(SK()||cards.some(isSkip)))a.push([SK()?'Hide skipped cards':'Show skipped cards',()=>{try{localStorage.showSkipped=SK()?'0':'1'}catch{}renderList();toast(SK()?'Skipped cards are shown':'Skipped cards are hidden',1800)},0,'select']);
@@ -799,7 +803,7 @@ function openDetail(id){editFromStudy=false;const c=cards.find(x=>x.id===id);if(
   +(c.status==='ready'?`<label class="tg" for="rv"><span>Reverse this card<small>Show the meaning on the front, the word on the back</small></span><input type="checkbox" class="sw" id="rv" data-id="${esc(c.id)}"${c.rev?' checked':''}></label>`:'')
   +`<label for="mv">Category</label><select id="mv" data-id="${esc(c.id)}">${opts}</select>`
   +(c.status==='ready'?`<p class="pron" style="margin-top:12px">${c.skipped&&c.due>Date.now()?`Skipped — returns ${new Date(c.due).toLocaleDateString('en-US')}`:'Next review: '+fmtDue(c.due)}${c.fs&&c.fs.stability>0?(()=>{const r=fsRet(c.fs,Date.now());return `<br><small>Stability ${c.fs.stability.toFixed(1)} d · Difficulty ${c.fs.difficulty.toFixed(1)}${r==null?'':' · Retrievability '+Math.round(r*100)+'%'}</small>`})():''}</p>`:'')
-  +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}${genBusy?'<button class="btn" data-stopgen type="button">Stop</button>':''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}${c.skipped&&c.due>Date.now()?`<button class="btn" data-unskip="${esc(c.id)}">Return to review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
+  +`<div class="row" style="margin-top:14px">${c.status!=='ready'?`<button class="btn pri" data-gen="${esc(c.id)}">Generate</button>`:''}${genBusy?'<button class="btn" data-stopgen type="button">Stop</button>':''}<button class="btn ${c.status==='ready'?'pri':''}" data-edit="${esc(c.id)}">Edit</button>${canRegen(c)?`<button class="btn" data-regen="${esc(c.id)}">Regenerate</button>`:''}${c.status==='ready'?`<button class="btn" data-resetone="${esc(c.id)}">Reset review</button>`:''}${c.skipped&&c.due>Date.now()?`<button class="btn" data-unskip="${esc(c.id)}">Return to review</button>`:''}<button class="btn danger" data-delone="${esc(c.id)}">Delete</button></div>`;
  if(!$('#dlg').open)$('#dlg').showModal()}
 function openEdit(id){const c=cards.find(x=>x.id===id);if(!c)return;const d=c.data||{};
  const ex=[...(d.examples||[]),{},{},{}].slice(0,3);
@@ -821,6 +825,7 @@ $('#dlg').addEventListener('click',async e=>{
  if(t.closest('[data-say]'))return speak(t.closest('[data-say]').dataset.say);
  if(v=at('gen')){$('#dlg').close();await requestGen([cards.find(x=>x.id===v)]);return}
  if(v=at('edit'))return openEdit(v);
+ if(v=at('regen')){const c=cards.find(x=>x.id===v);$('#dlg').close();await regen([c]);return}
  if(v=at('unskip')){await unskip([cards.find(x=>x.id===v)]);if(skippedList().length&&$('#dlgBody').textContent.includes('Skipped cards'))openSkipped();else $('#dlg').close();toast('Back in review');return}
  if(t.closest('[data-unskipall]')){await unskip(skippedList());$('#dlg').close();toast('Back in review');return}
  if(v=at('cancel')){if(editFromStudy){editFromStudy=false;$('#dlg').close();return}return openDetail(v)}
@@ -991,6 +996,35 @@ async function gen(list){
    await refresh()}
  }finally{const wasStop=genStop;genBusy=false;genStop=false;genCtl=null;$('#queue').textContent='';render();
   toast(wasStop?`Generation stopped${ok?` (${ok} generated)`:''}`:stop?`${stop}${ok?` (${ok} generated)`:''}`:`Generated ${ok} of ${total}`,4000)}
+}
+
+/* regenerate cards from scratch with AI: new meaning, pronunciation and examples replace the old text; review progress,
+   category, note and favourites are kept. If the AI fails, the card is left exactly as it was. */
+const canRegen=c=>c&&c.status==='ready'&&!(c.fields&&c.fields.length); // cards made from imported columns have no AI text
+async function regen(list){
+ list=(list||[]).filter(canRegen);
+ if(!list.length)return toast('Nothing to regenerate (cards from imported columns are skipped)',3500);
+ if(genBusy)return toast('Already generating…');
+ if(!KEY())return toast('Enter the access key in Settings first');
+ if(!navigator.onLine)return toast('You are offline');
+ if(!confirm(`Regenerate ${list.length} card${list.length===1?'':'s'} with AI?\n\nThe meaning, pronunciation and examples are created again from scratch and replace the current text (also your own edits). Review progress is kept.`))return;
+ genBusy=true;genStop=false;genCtl=new AbortController();const total=list.length;let left=total,ok=0,fail=0,stop='';render();
+ try{
+  for(let i=0;i<list.length&&!stop&&!genStop;i+=3){
+   const chunk=list.slice(i,i+3);
+   $('#queue').innerHTML=`Regenerating… ${left} left <button class="btn sm" data-stopgen type="button">Stop</button>`;toast(`Regenerating… ${left} left`,60000);
+   await Promise.all(chunk.map(async c=>{
+    try{const r=await fetch('/api/generate',{method:'POST',signal:genCtl.signal,headers:{'content-type':'application/json','x-app-key':KEY()},body:JSON.stringify({word:c.word})});
+     if(r.status===401){stop='Wrong access key';return}
+     const j=await r.json();if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+     const cur=await new Promise(q=>{const g=store('readonly').get(c.id);g.onsuccess=()=>q(g.result);g.onerror=()=>q(null)});
+     if(!cur||cur.deleted)return;
+     cur.data=j.data;cur.status='ready';delete cur.err;await save(cur);ok++}
+    catch(e){if(genStop||e.name==='AbortError')return;const m=String(e.message||e);if(m.includes('4006'))stop='AI quota used up for today. Try again later.';else fail++}
+    left--}));
+   await refresh()}
+ }finally{const wasStop=genStop;genBusy=false;genStop=false;genCtl=null;$('#queue').textContent='';await refresh();
+  toast(wasStop?`Stopped${ok?` (${ok} regenerated)`:''}`:stop?`${stop}${ok?` (${ok} regenerated)`:''}`:`Regenerated ${ok} of ${total}${fail?` · ${fail} failed, kept as before`:''}`,5000)}
 }
 
 /* ---------- sync ---------- */
