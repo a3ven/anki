@@ -758,7 +758,7 @@ $('#selbar').addEventListener('click',async e=>{const t=e.target.closest('button
 
 /* ---------- header actions ---------- */
 $('#syncBtn').onclick=()=>sync(true);
-$('#back').onclick=()=>{if(tab==='study'&&studyOpen){closeDeck();return}if(tab==='set'&&spOpen){openSp(null);return}if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
+$('#back').onclick=()=>{if(tab==='set'&&spOpen==='look'&&appReturn){const t=appReturn;appReturn=null;openSp(null);go(t);return}if(tab==='study'&&studyOpen){closeDeck();return}if(tab==='set'&&spOpen){openSp(null);return}if(tab==='cards'&&openCat){openCat=null;selMode=false;sel.clear();renderList()}};
 function showSheet(a,title,pop){const d=$('#sheet');d.classList.toggle('pop',!!pop);
  if(pop){const r=$('#more').getBoundingClientRect();d.style.setProperty('--pt',Math.round(r.top)+'px');d.style.setProperty('--pr',(innerWidth>600?Math.max(16,Math.round(innerWidth-r.right)):16)+'px')}
  $('#sheetBody').innerHTML=(title?`<b class="big" style="display:block;margin-bottom:6px">${esc(title)}</b>`:'')+a.map((x,i)=>`<button class="act ${x[2]?'danger':''} ${x[4]?'sep':''}" data-i="${i}">${x[3]?ico(x[3]):''}<span>${esc(x[0])}</span></button>`).join('');
@@ -792,7 +792,7 @@ $('#more').onclick=()=>{const a=[];
  if(tab==='cards'&&!openCat&&cards.length)a.push(['Reorder & pin',()=>{catEdit=true;renderList()},0,'sort'],['Export all to Excel',exportAll,0,'export']);
  if(tab==='cards'&&(SK()||cards.some(isSkip)))a.push([SK()?'Hide skipped cards':'Show skipped cards',()=>{try{localStorage.showSkipped=SK()?'0':'1'}catch{}renderList();toast(SK()?'Skipped cards are shown':'Skipped cards are hidden',1800)},0,'select']);
  if(genBusy)a.push(['Stop generating',stopGen,1,'stop']);
- a.push(['Appearance',()=>{go('set');openSp('look')},0,'theme',a.length],['Sync now',()=>sync(true),0,'sync'],['Switch theme',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'),0,'theme']);
+ a.push(['Appearance',()=>{appReturn=(tab==='study'&&studyOpen)||(tab==='cards'&&openCat)?tab:null;go('set');openSp('look')},0,'theme',a.length],['Sync now',()=>sync(true),0,'sync'],['Switch theme',()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light'),0,'theme']);
  showSheet(a,'',true)};
 
 /* ---------- card detail + edit ---------- */
@@ -1212,7 +1212,8 @@ $('#ivBox').addEventListener('change',e=>{if(e.target.id!=='drIn')return;const v
 $('#ivBox').addEventListener('click',e=>{if(e.target.id==='ivReset'){delete localStorage.dr;recs=null;renderIntervals();renderStudy();toast('Back to 90%')}});
 renderIntervals();
 function render(){renderChips();renderStudy();fillCatSelect();if(!$('#cards').hidden)renderList()}
-function go(t){tab=t;selMode=false;sel.clear();catEdit=false;
+let appReturn=null; // screen to return to when Appearance was opened from the menu inside a deck / category
+function go(t){if(t!=='set')appReturn=null;tab=t;selMode=false;sel.clear();catEdit=false;
  document.querySelectorAll('nav button').forEach(x=>x.setAttribute('aria-selected',x.dataset.t===t));
  document.querySelectorAll('main section').forEach(s=>s.hidden=s.id!==t);
  if(t==='cards')renderList();if(t==='study'){renderChips();renderStudy()}renderHeader();renderSelbar()}
