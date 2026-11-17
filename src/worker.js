@@ -4,7 +4,7 @@ const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 // [model id, use JSON mode?]
 const CF_MODELS = [
   ["@cf/qwen/qwen3.8-27b", false],
-  ["@cf/deepseek-ai/deepseek-v4-flash-0731", false],
+  ["@cf/deepseek-ai/deepseek-v4.1-flash-1017", false],
   [MODEL, true],
   [MODEL, false],
 ];
